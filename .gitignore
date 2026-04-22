@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+
+# .NET build outputs
+**/bin/
+**/obj/
+**/publish/
+**/publish-test/
+
+# Test and coverage outputs
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# NuGet local artifacts
+*.nupkg
+*.snupkg

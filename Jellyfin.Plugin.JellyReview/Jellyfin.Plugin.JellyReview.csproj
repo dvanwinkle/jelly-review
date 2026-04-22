@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <AssemblyName>Jellyfin.Plugin.JellyReview</AssemblyName>
+    <RootNamespace>Jellyfin.Plugin.JellyReview</RootNamespace>
+    <Version>0.0.1</Version>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Jellyfin.Model" Version="10.11.*" ExcludeAssets="runtime" />
+    <PackageReference Include="Jellyfin.Controller" Version="10.11.*" ExcludeAssets="runtime" />
+    <PackageReference Include="Jellyfin.Common" Version="10.11.*" ExcludeAssets="runtime" />
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="8.*" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.*" ExcludeAssets="native" />
+    <PackageReference Include="System.Text.Json" Version="9.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Web\**\*" />
+    <EmbeddedResource Include="Data\Schema.sql" />
+  </ItemGroup>
+</Project>

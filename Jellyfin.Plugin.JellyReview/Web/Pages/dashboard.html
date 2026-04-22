@@ -1,0 +1,203 @@
+<div data-role="page" class="page type-interior pluginConfigurationPage" id="jellyReviewPage" data-controller="__plugin/jellyreview-dashboard.js">
+    <div data-role="content">
+        <style>
+            #jellyReviewPage, #jellyReviewPage * { box-sizing: border-box; }
+            #jellyReviewPage { color: #e5e7eb; }
+            #jellyReviewPage #jr-app { display: flex; flex-direction: column; min-height: calc(100vh - 5rem); background: #101826; color: #e5e7eb; border-radius: 18px; overflow: hidden; }
+            #jellyReviewPage #jr-header { background: linear-gradient(180deg, #18263a 0%, #131d2b 100%); padding: 18px 96px 18px 24px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #233247; flex-wrap: wrap; }
+            #jellyReviewPage #jr-header h1 { margin: 0; font-size: 28px; line-height: 1.1; color: #f8fafc; font-weight: 700; }
+            #jellyReviewPage #jr-version { font-size: 12px; color: #94a3b8; }
+            #jellyReviewPage #jr-status-badge { background: #1d4ed8; color: #eff6ff; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            #jellyReviewPage #jr-nav { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 24px; background: #131d2b; border-bottom: 1px solid #233247; }
+            #jellyReviewPage .jr-nav-btn { appearance: none; border: 1px solid #334155; background: #1e293b; color: #cbd5e1; border-radius: 999px; padding: 10px 14px; cursor: pointer; font-size: 13px; font-weight: 600; }
+            #jellyReviewPage .jr-nav-btn.active { background: #0ea5e9; border-color: #0ea5e9; color: #082f49; }
+            #jellyReviewPage #jr-content { padding: 24px; overflow-y: auto; }
+            #jellyReviewPage .jr-section { display: none; }
+            #jellyReviewPage #jr-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
+            #jellyReviewPage .jr-count-badge, #jellyReviewPage .jr-settings-group, #jellyReviewPage .jr-rule-row, #jellyReviewPage .jr-channel-row, #jellyReviewPage .jr-profile-card, #jellyReviewPage .jr-card { background: #18263a; border: 1px solid #233247; border-radius: 14px; }
+            #jellyReviewPage .jr-count-badge { padding: 14px 16px; cursor: pointer; }
+            #jellyReviewPage .jr-count-badge .num { font-size: 28px; font-weight: 800; color: #38bdf8; }
+            #jellyReviewPage .jr-count-badge .label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; }
+            #jellyReviewPage .jr-toolbar, #jellyReviewPage .jr-form-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
+            #jellyReviewPage .jr-toolbar > * { flex: 0 0 auto; }
+            #jellyReviewPage .jr-settings-group { padding: 18px; margin-bottom: 16px; }
+            #jellyReviewPage .jr-settings-group h3, #jellyReviewPage .jr-section-header { margin: 0 0 14px; color: #f8fafc; }
+            #jellyReviewPage .jr-settings-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+            #jellyReviewPage .jr-settings-row label { width: 180px; max-width: 100%; color: #94a3b8; font-size: 12px; }
+            #jellyReviewPage input[type="text"], #jellyReviewPage input[type="search"], #jellyReviewPage input[type="number"], #jellyReviewPage select, #jellyReviewPage textarea { appearance: none; width: auto; min-width: 180px; max-width: 100%; background: #0f172a; border: 1px solid #334155; color: #e5e7eb; border-radius: 10px; padding: 10px 12px; font: inherit; }
+            #jellyReviewPage textarea { min-width: 320px; min-height: 88px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+            #jellyReviewPage #jr-search, #jellyReviewPage #jr-history-search { min-width: 260px; width: min(360px, 100%); }
+            #jellyReviewPage .jr-btn { appearance: none; border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; font-size: 13px; font-weight: 700; }
+            #jellyReviewPage .jr-btn-approve { background: #22c55e; color: #052e16; }
+            #jellyReviewPage .jr-btn-deny { background: #ef4444; color: #fff; }
+            #jellyReviewPage .jr-btn-defer { background: #f59e0b; color: #431407; }
+            #jellyReviewPage .jr-btn-secondary { background: #334155; color: #e2e8f0; }
+            #jellyReviewPage .jr-btn-danger { background: #7f1d1d; color: #fecaca; }
+            #jellyReviewPage #jr-media-list, #jellyReviewPage #jr-history-items { display: flex; flex-direction: column; gap: 12px; }
+            #jellyReviewPage .jr-card { display: flex; gap: 14px; padding: 14px; }
+            #jellyReviewPage .jr-poster { width: 72px; height: 108px; object-fit: cover; border-radius: 10px; background: #0f172a; flex-shrink: 0; }
+            #jellyReviewPage .jr-card-body { flex: 1; min-width: 0; }
+            #jellyReviewPage .jr-card-title { font-size: 16px; font-weight: 700; color: #f8fafc; margin-bottom: 4px; }
+            #jellyReviewPage .jr-year, #jellyReviewPage .jr-card-meta, #jellyReviewPage .jr-card-overview, #jellyReviewPage .jr-meta, #jellyReviewPage .jr-empty { color: #94a3b8; }
+            #jellyReviewPage .jr-card-state, #jellyReviewPage .jr-rule-action, #jellyReviewPage .jr-channel-type, #jellyReviewPage .jr-badge-on, #jellyReviewPage .jr-badge-off, #jellyReviewPage .jr-rule-priority { display: inline-block; border-radius: 999px; padding: 4px 9px; font-size: 11px; font-weight: 700; }
+            #jellyReviewPage .jr-state-pending { background: rgba(245, 158, 11, .18); color: #fbbf24; }
+            #jellyReviewPage .jr-state-approved, #jellyReviewPage .jr-badge-on, #jellyReviewPage .jr-action-auto_approve { background: rgba(34, 197, 94, .18); color: #4ade80; }
+            #jellyReviewPage .jr-state-denied, #jellyReviewPage .jr-badge-off, #jellyReviewPage .jr-action-auto_deny { background: rgba(239, 68, 68, .18); color: #f87171; }
+            #jellyReviewPage .jr-state-deferred, #jellyReviewPage .jr-action-defer { background: rgba(99, 102, 241, .18); color: #a5b4fc; }
+            #jellyReviewPage .jr-action-send_to_review, #jellyReviewPage .jr-channel-type, #jellyReviewPage .jr-rule-priority { background: rgba(56, 189, 248, .16); color: #7dd3fc; }
+            #jellyReviewPage .jr-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+            #jellyReviewPage #jr-pagination, #jellyReviewPage #jr-history-pagination { display: flex; align-items: center; gap: 12px; padding-top: 16px; }
+            #jellyReviewPage #jr-pagination button, #jellyReviewPage #jr-history-pagination button { appearance: none; background: #1e293b; border: 1px solid #334155; color: #e2e8f0; border-radius: 10px; padding: 8px 12px; }
+            #jellyReviewPage .jr-rule-row, #jellyReviewPage .jr-channel-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; margin-bottom: 10px; }
+            #jellyReviewPage .jr-rule-name, #jellyReviewPage .jr-channel-name { font-weight: 700; color: #f8fafc; flex: 1; }
+            #jellyReviewPage .jr-rule-conditions { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #94a3b8; flex: 1 1 260px; }
+            #jellyReviewPage .jr-profile-card { padding: 12px; margin-bottom: 8px; }
+            #jellyReviewPage .jr-modal { display: none; position: fixed; inset: 0; background: rgba(2, 6, 23, .74); z-index: 9999; align-items: center; justify-content: center; }
+            #jellyReviewPage .jr-modal-box { background: #18263a; border: 1px solid #233247; border-radius: 16px; width: min(760px, calc(100vw - 32px)); max-height: 80vh; overflow: auto; padding: 20px; }
+            #jellyReviewPage table { width: 100%; border-collapse: collapse; }
+            #jellyReviewPage th, #jellyReviewPage td { text-align: left; padding: 8px; border-bottom: 1px solid #233247; }
+            #jellyReviewPage .jr-toast { display: none; position: fixed; bottom: 24px; right: 24px; z-index: 10000; padding: 12px 20px; border-radius: 10px; font-weight: 600; font-size: 14px; max-width: 360px; word-break: break-word; }
+            #jellyReviewPage .jr-toast-success { background: #166534; color: #bbf7d0; border: 1px solid #16a34a; }
+            #jellyReviewPage .jr-toast-error { background: #7f1d1d; color: #fecaca; border: 1px solid #dc2626; }
+            @media (max-width: 800px) {
+                #jellyReviewPage #jr-header, #jellyReviewPage #jr-nav, #jellyReviewPage #jr-content { padding-left: 16px; padding-right: 16px; }
+                #jellyReviewPage #jr-header { padding-right: 16px; }
+                #jellyReviewPage .jr-settings-row { flex-direction: column; align-items: flex-start; }
+                #jellyReviewPage .jr-settings-row label { width: auto; }
+                #jellyReviewPage textarea { min-width: 100%; width: 100%; }
+                #jellyReviewPage .jr-toolbar > * { width: 100%; }
+                #jellyReviewPage .jr-toolbar .jr-btn { width: auto; }
+            }
+        </style>
+
+        <div id="jr-app">
+            <div id="jr-header">
+                <h1>JellyReview</h1>
+                <span id="jr-version"></span>
+                <div style="flex:1"></div>
+                <span id="jr-status-badge"><span id="jr-status-pending">—</span> pending</span>
+            </div>
+
+            <div id="jr-nav">
+                <button type="button" class="jr-nav-btn active" data-section="pending">Queue</button>
+                <button type="button" class="jr-nav-btn" data-section="history">History</button>
+                <button type="button" class="jr-nav-btn" data-section="profiles">Profiles</button>
+                <button type="button" class="jr-nav-btn" data-section="rules">Rules</button>
+                <button type="button" class="jr-nav-btn" data-section="notifications">Notifications</button>
+                <button type="button" class="jr-nav-btn" data-section="settings">Settings</button>
+            </div>
+
+            <div id="jr-content">
+                <div id="jr-section-pending" class="jr-section">
+                    <div id="jr-counts">
+                        <div class="jr-count-badge" data-state="pending"><div class="num" id="jr-count-pending">—</div><div class="label">Pending</div></div>
+                        <div class="jr-count-badge" data-state="approved"><div class="num" id="jr-count-approved">—</div><div class="label">Approved</div></div>
+                        <div class="jr-count-badge" data-state="denied"><div class="num" id="jr-count-denied">—</div><div class="label">Denied</div></div>
+                        <div class="jr-count-badge" data-state="deferred"><div class="num" id="jr-count-deferred">—</div><div class="label">Deferred</div></div>
+                    </div>
+                    <div class="jr-toolbar">
+                        <input type="search" id="jr-search" placeholder="Search title...">
+                        <button type="button" class="jr-btn jr-btn-approve" id="jr-bulk-approve">Approve Selected</button>
+                        <button type="button" class="jr-btn jr-btn-deny" id="jr-bulk-deny">Deny Selected</button>
+                        <button type="button" class="jr-btn jr-btn-defer" id="jr-bulk-defer">Defer Selected</button>
+                    </div>
+                    <div id="jr-media-list"></div>
+                    <div id="jr-pagination"></div>
+                </div>
+
+                <div id="jr-section-history" class="jr-section">
+                    <div class="jr-section-header">Review History</div>
+                    <div class="jr-toolbar">
+                        <select id="jr-history-state">
+                            <option value="">All</option>
+                            <option value="approved">Approved</option>
+                            <option value="denied">Denied</option>
+                            <option value="deferred">Deferred</option>
+                        </select>
+                        <input type="search" id="jr-history-search" placeholder="Search title...">
+                    </div>
+                    <div id="jr-history-items"></div>
+                    <div id="jr-history-pagination"></div>
+                </div>
+
+                <div id="jr-section-profiles" class="jr-section">
+                    <div class="jr-section-header">Viewer Profiles</div>
+                    <div id="jr-profiles-list"></div>
+                    <div class="jr-settings-group" style="margin-top:16px">
+                        <h3>Setup Checklist</h3>
+                        <p>For each child user in Jellyfin, enable parental controls:<br><strong>User → Parental Control → Block content with tags → add <code>jelly-guard-pending</code></strong><br>This blocks all unreviewed items. Approved items have the tag removed automatically.</p>
+                    </div>
+                </div>
+
+                <div id="jr-section-rules" class="jr-section">
+                    <div class="jr-section-header">Auto-Review Rules</div>
+                    <div id="jr-rules-list"></div>
+                    <div class="jr-settings-group">
+                        <h3>Add Rule</h3>
+                        <div class="jr-form-row">
+                            <div><label>Name</label><input type="text" id="jr-rule-name" placeholder="Rule name"></div>
+                            <div><label>Action</label><select id="jr-rule-action"><option value="auto_approve">Auto-approve</option><option value="auto_deny">Auto-deny</option><option value="send_to_review">Send to review</option><option value="defer">Defer</option></select></div>
+                            <div><label>Priority</label><input type="number" id="jr-rule-priority" value="100"></div>
+                        </div>
+                        <div class="jr-form-row">
+                            <div><label>Conditions (JSON)</label><textarea id="jr-rule-conditions" placeholder='{"official_rating_in":["G","PG"]}'></textarea></div>
+                            <button type="button" class="jr-btn jr-btn-approve" id="jr-rule-create">Add Rule</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="jr-section-notifications" class="jr-section">
+                    <div class="jr-section-header">Notification Channels</div>
+                    <div id="jr-channels-list"></div>
+                    <div class="jr-settings-group">
+                        <h3>Add Channel</h3>
+                        <div class="jr-form-row">
+                            <div><label>Name</label><input type="text" id="jr-ch-name" placeholder="e.g. My Discord"></div>
+                            <div><label>Provider</label><select id="jr-ch-type"><option value="discord">Discord</option><option value="ntfy">Ntfy</option><option value="slack">Slack</option><option value="pushover">Pushover</option><option value="smtp">SMTP</option><option value="webhook">Webhook</option></select></div>
+                        </div>
+                        <div class="jr-form-row">
+                            <div><label>Config (JSON)</label><textarea id="jr-ch-config" placeholder='{"webhook_url":"https://discord.com/api/webhooks/..."}'></textarea></div>
+                            <button type="button" class="jr-btn jr-btn-approve" id="jr-channel-create">Add</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="jr-section-settings" class="jr-section">
+                    <div class="jr-section-header">Settings</div>
+                    <div class="jr-settings-group">
+                        <h3>Tag Names</h3>
+                        <div class="jr-settings-row"><label>Pending Tag</label><input type="text" id="jr-setting-pending-tag"></div>
+                        <div class="jr-settings-row"><label>Denied Tag</label><input type="text" id="jr-setting-denied-tag"></div>
+                        <button type="button" class="jr-btn jr-btn-approve" id="jr-tags-save">Save Tags</button>
+                    </div>
+                    <div class="jr-settings-group">
+                        <h3>Sync</h3>
+                        <div class="jr-settings-row"><label>Polling Interval (seconds)</label><input type="number" id="jr-setting-polling" min="60"></div>
+                        <div class="jr-settings-row"><label>Auto-apply Rules</label><input type="checkbox" id="jr-setting-auto-rules"></div>
+                        <div class="jr-form-row">
+                            <button type="button" class="jr-btn jr-btn-secondary" id="jr-btn-sync">Incremental Sync</button>
+                            <button type="button" class="jr-btn jr-btn-secondary" id="jr-btn-full-sync">Full Import</button>
+                            <button type="button" class="jr-btn jr-btn-secondary" id="jr-integrations-save">Save Settings</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="jr-history-modal" class="jr-modal">
+            <div class="jr-modal-box">
+                <div class="jr-modal-header">
+                    <h3 id="jr-history-title">History</h3>
+                    <button type="button" class="jr-btn jr-btn-secondary" id="jr-history-close">Close</button>
+                </div>
+                <table>
+                    <thead><tr><th>Time</th><th>Transition</th><th>Action</th><th>Actor</th></tr></thead>
+                    <tbody id="jr-history-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="jr-toast" class="jr-toast"></div>
+    </div>
+
+</div>

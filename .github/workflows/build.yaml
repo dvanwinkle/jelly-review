@@ -1,0 +1,144 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy-pages.outputs.page_url }}
+    defaults:
+      run:
+        working-directory: Jellyfin.Plugin.JellyReview
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Publish
+        run: dotnet publish --no-restore --configuration Release --output ../publish
+
+      - name: Generate plugin metadata
+        working-directory: .
+        env:
+          PLUGIN_GUID: a8b1c2d3-e4f5-6789-abcd-ef0123456789
+          PLUGIN_NAME: JellyReview
+          PLUGIN_CATEGORY: General
+          PLUGIN_OWNER: ${{ github.repository_owner }}
+          PLUGIN_DESCRIPTION: Review workflow plugin for Jellyfin.
+          PLUGIN_OVERVIEW: Review and moderate media in Jellyfin
+          TARGET_ABI: 10.10.0.0
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ "${VERSION}" = "${GITHUB_REF_NAME}" ]; then
+            VERSION="0.0.0.0"
+          fi
+          TIMESTAMP="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          cat > publish/meta.json <<EOF
+          {
+            "category": "${PLUGIN_CATEGORY}",
+            "changelog": "Build ${GITHUB_SHA}",
+            "description": "${PLUGIN_DESCRIPTION}",
+            "guid": "${PLUGIN_GUID}",
+            "name": "${PLUGIN_NAME}",
+            "overview": "${PLUGIN_OVERVIEW}",
+            "owner": "${PLUGIN_OWNER}",
+            "targetAbi": "${TARGET_ABI}",
+            "timestamp": "${TIMESTAMP}",
+            "version": "${VERSION}"
+          }
+          EOF
+
+      - name: Package plugin zip
+        run: |
+          mkdir -p ../dist
+          cd ../publish
+          zip -r ../dist/Jellyfin.Plugin.JellyReview.zip .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: Jellyfin.Plugin.JellyReview
+          path: dist/Jellyfin.Plugin.JellyReview.zip
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Jellyfin.Plugin.JellyReview.zip
+
+      - name: Generate plugin manifest
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: .
+        env:
+          PLUGIN_GUID: a8b1c2d3-e4f5-6789-abcd-ef0123456789
+          PLUGIN_NAME: JellyReview
+          PLUGIN_CATEGORY: General
+          PLUGIN_OWNER: ${{ github.repository_owner }}
+          PLUGIN_DESCRIPTION: Review workflow plugin for Jellyfin.
+          PLUGIN_OVERVIEW: Review and moderate media in Jellyfin
+          TARGET_ABI: 10.10.0.0
+        run: |
+          mkdir -p pages
+          VERSION="${GITHUB_REF_NAME#v}"
+          CHECKSUM="$(md5sum dist/Jellyfin.Plugin.JellyReview.zip | awk '{print $1}')"
+          SOURCE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Jellyfin.Plugin.JellyReview.zip"
+          TIMESTAMP="$(date -u '+%Y-%m-%d %H:%M:%S')"
+          cat > pages/manifest.json <<EOF
+          [
+            {
+              "category": "${PLUGIN_CATEGORY}",
+              "guid": "${PLUGIN_GUID}",
+              "name": "${PLUGIN_NAME}",
+              "description": "${PLUGIN_DESCRIPTION}",
+              "owner": "${PLUGIN_OWNER}",
+              "overview": "${PLUGIN_OVERVIEW}",
+              "versions": [
+                {
+                  "checksum": "${CHECKSUM}",
+                  "changelog": "Release ${GITHUB_REF_NAME}",
+                  "targetAbi": "${TARGET_ABI}",
+                  "sourceUrl": "${SOURCE_URL}",
+                  "timestamp": "${TIMESTAMP}",
+                  "version": "${VERSION}"
+                }
+              ]
+            }
+          ]
+          EOF
+
+      - name: Configure GitHub Pages
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: pages
+
+      - name: Deploy to GitHub Pages
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: deploy-pages
+        uses: actions/deploy-pages@v4
