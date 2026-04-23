@@ -1,16 +1,15 @@
-import {
-    esc,
-    RATING_OPTIONS,
-    MEDIA_TYPE_OPTIONS,
-    GENRE_OPTIONS,
-    CONDITION_LABELS,
-    MUTUALLY_EXCLUSIVE,
-    renderConditionRow,
-    getConditionsFromDom,
-    formatConditions,
-} from '/web/configurationpage?name=jellyreview-rule-builder.js';
-
 const PAGE_SIZE = 25;
+
+function loadRuleBuilder() {
+    return new Promise((resolve, reject) => {
+        if (window.JellyReviewRuleBuilder) { resolve(window.JellyReviewRuleBuilder); return; }
+        const script = document.createElement('script');
+        script.src = '/web/configurationpage?name=jellyreview-rule-builder.js';
+        script.onload = () => resolve(window.JellyReviewRuleBuilder);
+        script.onerror = () => reject(new Error('Failed to load rule-builder.js'));
+        document.head.appendChild(script);
+    });
+}
 
 function makeApi() {
     const base = '/JellyReview';
@@ -72,12 +71,22 @@ function makeApi() {
     };
 }
 
+function esc(str) {
+    if (!str) return '';
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 function createController(view) {
     const Api = makeApi();
     let currentSection = 'pending';
     let currentState = 'pending';
     let currentOffset = 0;
     let eventsWired = false;
+    let rb = null;
 
     const $ = (sel) => view.querySelector(sel);
     const $$ = (sel) => Array.from(view.querySelectorAll(sel));
@@ -292,7 +301,7 @@ function createController(view) {
     let editingRuleId = null;
 
     function getConditionsFromBuilder() {
-        return getConditionsFromDom($$('.jr-condition-row'));
+        return rb.getConditionsFromDom($$('.jr-condition-row'));
     }
 
     function updateConditionPreview() {
@@ -318,13 +327,13 @@ function createController(view) {
             return;
         }
         const list = $('#jr-conditions-list');
-        list.insertAdjacentHTML('beforeend', renderConditionRow(type, type.startsWith('community_rating') ? null : []));
+        list.insertAdjacentHTML('beforeend', rb.renderConditionRow(type, type.startsWith('community_rating') ? null : []));
         select.value = '';
 
         const opt = select.querySelector(`option[value="${type}"]`);
         if (opt) opt.disabled = true;
 
-        const exclusive = MUTUALLY_EXCLUSIVE[type];
+        const exclusive = rb.MUTUALLY_EXCLUSIVE[type];
         if (exclusive) {
             const exOpt = select.querySelector(`option[value="${exclusive}"]`);
             if (exOpt) exOpt.disabled = true;
@@ -338,7 +347,7 @@ function createController(view) {
         row.remove();
         const opt = $(`#jr-add-condition-type option[value="${type}"]`);
         if (opt) opt.disabled = false;
-        const exclusive = MUTUALLY_EXCLUSIVE[type];
+        const exclusive = rb.MUTUALLY_EXCLUSIVE[type];
         if (exclusive && !$(`[data-condition-type="${exclusive}"]`)) {
             const exOpt = $(`#jr-add-condition-type option[value="${exclusive}"]`);
             if (exOpt) exOpt.disabled = false;
@@ -371,12 +380,12 @@ function createController(view) {
         try { conditions = JSON.parse(rule.conditionsJson); } catch {}
 
         for (const [type, value] of Object.entries(conditions)) {
-            if (!(type in CONDITION_LABELS)) continue;
+            if (!(type in rb.CONDITION_LABELS)) continue;
             const list = $('#jr-conditions-list');
-            list.insertAdjacentHTML('beforeend', renderConditionRow(type, value));
+            list.insertAdjacentHTML('beforeend', rb.renderConditionRow(type, value));
             const opt = $(`#jr-add-condition-type option[value="${type}"]`);
             if (opt) opt.disabled = true;
-            const exclusive = MUTUALLY_EXCLUSIVE[type];
+            const exclusive = rb.MUTUALLY_EXCLUSIVE[type];
             if (exclusive) {
                 const exOpt = $(`#jr-add-condition-type option[value="${exclusive}"]`);
                 if (exOpt) exOpt.disabled = true;
@@ -399,7 +408,7 @@ function createController(view) {
                     <span class="jr-rule-priority">${r.priority}</span>
                     <span class="jr-rule-name">${esc(r.name)}</span>
                     <span class="jr-rule-action jr-action-${r.action}">${r.action}</span>
-                    <span class="jr-rule-conditions">${formatConditions(r.conditionsJson)}</span>
+                    <span class="jr-rule-conditions">${rb.formatConditions(r.conditionsJson)}</span>
                     <button type="button" class="jr-btn jr-btn-secondary" data-rule-edit='${esc(JSON.stringify(r))}'>Edit</button>
                     <button type="button" class="jr-btn jr-btn-secondary" data-rule-toggle="${esc(r.id)}" data-rule-enabled="${!r.enabled}">${r.enabled ? 'Disable' : 'Enable'}</button>
                     <button type="button" class="jr-btn jr-btn-danger" data-rule-delete="${esc(r.id)}">Delete</button>
@@ -640,6 +649,7 @@ function createController(view) {
     return {
         bindEvents,
         async refresh() {
+            rb = await loadRuleBuilder();
             currentOffset = 0;
             currentState = 'pending';
             await loadStatus();

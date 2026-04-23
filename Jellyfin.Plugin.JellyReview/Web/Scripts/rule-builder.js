@@ -1,4 +1,5 @@
-export function esc(str) {
+// UMD-style: export for ES module (tests) and attach to window (Jellyfin runtime)
+function esc(str) {
     if (!str) return '';
     return str
         .replace(/&/g, '&amp;')
@@ -7,11 +8,11 @@ export function esc(str) {
         .replace(/"/g, '&quot;');
 }
 
-export const RATING_OPTIONS = ['G', 'PG', 'PG-13', 'R', 'NC-17', 'TV-Y', 'TV-Y7', 'TV-G', 'TV-PG', 'TV-14', 'TV-MA', 'X', 'NR', 'UR'];
-export const MEDIA_TYPE_OPTIONS = ['movie', 'series'];
-export const GENRE_OPTIONS = ['Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Fantasy', 'History', 'Horror', 'Music', 'Mystery', 'Romance', 'Science Fiction', 'Thriller', 'War', 'Western'];
+const RATING_OPTIONS = ['G', 'PG', 'PG-13', 'R', 'NC-17', 'TV-Y', 'TV-Y7', 'TV-G', 'TV-PG', 'TV-14', 'TV-MA', 'X', 'NR', 'UR'];
+const MEDIA_TYPE_OPTIONS = ['movie', 'series'];
+const GENRE_OPTIONS = ['Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Fantasy', 'History', 'Horror', 'Music', 'Mystery', 'Romance', 'Science Fiction', 'Thriller', 'War', 'Western'];
 
-export const CONDITION_LABELS = {
+const CONDITION_LABELS = {
     official_rating_in: 'Rating is one of',
     official_rating_not_in: 'Rating is NOT one of',
     media_type_in: 'Media type is',
@@ -20,12 +21,12 @@ export const CONDITION_LABELS = {
     community_rating_lte: 'Community rating \u2264',
 };
 
-export const MUTUALLY_EXCLUSIVE = {
+const MUTUALLY_EXCLUSIVE = {
     official_rating_in: 'official_rating_not_in',
     official_rating_not_in: 'official_rating_in',
 };
 
-export function renderConditionRow(type, values) {
+function renderConditionRow(type, values) {
     const label = CONDITION_LABELS[type] || type;
     let inputHtml = '';
 
@@ -52,7 +53,7 @@ export function renderConditionRow(type, values) {
         </div>`;
 }
 
-export function getConditionsFromDom(conditionRows) {
+function getConditionsFromDom(conditionRows) {
     const conditions = {};
     conditionRows.forEach((row) => {
         const type = row.dataset.conditionType;
@@ -67,7 +68,7 @@ export function getConditionsFromDom(conditionRows) {
     return conditions;
 }
 
-export function formatConditions(conditionsJson) {
+function formatConditions(conditionsJson) {
     try {
         const c = JSON.parse(conditionsJson);
         const parts = [];
@@ -85,6 +86,38 @@ export function formatConditions(conditionsJson) {
     }
 }
 
-export function getExclusionTarget(type) {
+function getExclusionTarget(type) {
     return MUTUALLY_EXCLUSIVE[type] || null;
 }
+
+const JellyReviewRuleBuilder = {
+    esc,
+    RATING_OPTIONS,
+    MEDIA_TYPE_OPTIONS,
+    GENRE_OPTIONS,
+    CONDITION_LABELS,
+    MUTUALLY_EXCLUSIVE,
+    renderConditionRow,
+    getConditionsFromDom,
+    formatConditions,
+    getExclusionTarget,
+};
+
+// Attach to window for Jellyfin runtime
+if (typeof window !== 'undefined') {
+    window.JellyReviewRuleBuilder = JellyReviewRuleBuilder;
+}
+
+// ES module exports for tests
+export {
+    esc,
+    RATING_OPTIONS,
+    MEDIA_TYPE_OPTIONS,
+    GENRE_OPTIONS,
+    CONDITION_LABELS,
+    MUTUALLY_EXCLUSIVE,
+    renderConditionRow,
+    getConditionsFromDom,
+    formatConditions,
+    getExclusionTarget,
+};
