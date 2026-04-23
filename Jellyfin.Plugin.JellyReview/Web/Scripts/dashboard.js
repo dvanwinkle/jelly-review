@@ -1,18 +1,75 @@
 const PAGE_SIZE = 25;
 
-function loadRuleBuilder() {
-    return new Promise((resolve, reject) => {
-        if (window.JellyReviewRuleBuilder) { resolve(window.JellyReviewRuleBuilder); return; }
-        const script = document.createElement('script');
-        if (window.ApiClient) {
-            script.src = window.ApiClient.getUrl('/web/configurationpage', { name: 'jellyreview-rule-builder.js' });
-        } else {
-            script.src = '/web/configurationpage?name=jellyreview-rule-builder.js';
+function esc(str) {
+    if (!str) return '';
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+const RATING_OPTIONS = ['G', 'PG', 'PG-13', 'R', 'NC-17', 'TV-Y', 'TV-Y7', 'TV-G', 'TV-PG', 'TV-14', 'TV-MA', 'X', 'NR', 'UR'];
+const MEDIA_TYPE_OPTIONS = ['movie', 'series'];
+const GENRE_OPTIONS = ['Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Fantasy', 'History', 'Horror', 'Music', 'Mystery', 'Romance', 'Science Fiction', 'Thriller', 'War', 'Western'];
+
+const CONDITION_LABELS = {
+    official_rating_in: 'Rating is one of',
+    official_rating_not_in: 'Rating is NOT one of',
+    media_type_in: 'Media type is',
+    genre_in: 'Genre includes',
+    community_rating_gte: 'Community rating \u2265',
+    community_rating_lte: 'Community rating \u2264',
+};
+
+const MUTUALLY_EXCLUSIVE = {
+    official_rating_in: 'official_rating_not_in',
+    official_rating_not_in: 'official_rating_in',
+};
+
+function renderConditionRow(type, values) {
+    const label = CONDITION_LABELS[type] || type;
+    let inputHtml = '';
+
+    if (type === 'official_rating_in' || type === 'official_rating_not_in') {
+        inputHtml = `<div class="jr-chip-group">${RATING_OPTIONS.map((r) =>
+            `<button type="button" class="jr-chip${(values || []).includes(r) ? ' selected' : ''}" data-chip-value="${esc(r)}">${esc(r)}</button>`
+        ).join('')}</div>`;
+    } else if (type === 'media_type_in') {
+        inputHtml = `<div class="jr-chip-group">${MEDIA_TYPE_OPTIONS.map((t) =>
+            `<button type="button" class="jr-chip${(values || []).includes(t) ? ' selected' : ''}" data-chip-value="${esc(t)}">${t === 'movie' ? 'Movie' : 'Series'}</button>`
+        ).join('')}</div>`;
+    } else if (type === 'genre_in') {
+        inputHtml = `<div class="jr-chip-group">${GENRE_OPTIONS.map((g) =>
+            `<button type="button" class="jr-chip${(values || []).includes(g) ? ' selected' : ''}" data-chip-value="${esc(g)}">${esc(g)}</button>`
+        ).join('')}</div>`;
+    } else if (type === 'community_rating_gte' || type === 'community_rating_lte') {
+        inputHtml = `<input type="number" class="jr-condition-number" min="0" max="10" step="0.1" value="${values ?? ''}" placeholder="0-10">`;
+    }
+
+    return `<div class="jr-condition-row" data-condition-type="${esc(type)}">
+            <span style="color:#94a3b8;font-size:12px;font-weight:600;min-width:140px;padding-top:5px">${label}</span>
+            ${inputHtml}
+            <button type="button" class="jr-condition-remove" title="Remove condition">&times;</button>
+        </div>`;
+}
+
+function formatConditions(conditionsJson) {
+    try {
+        const c = JSON.parse(conditionsJson);
+        const parts = [];
+        for (const [key, val] of Object.entries(c)) {
+            const label = CONDITION_LABELS[key] || key;
+            if (Array.isArray(val)) {
+                parts.push(`${label}: ${val.join(', ')}`);
+            } else {
+                parts.push(`${label}: ${val}`);
+            }
         }
-        script.onload = () => resolve(window.JellyReviewRuleBuilder);
-        script.onerror = () => reject(new Error('Failed to load rule-builder.js'));
-        document.head.appendChild(script);
-    });
+        return esc(parts.join(' · '));
+    } catch {
+        return esc(conditionsJson);
+    }
 }
 
 function makeApi() {
@@ -75,22 +132,12 @@ function makeApi() {
     };
 }
 
-function esc(str) {
-    if (!str) return '';
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
-
 function createController(view) {
     const Api = makeApi();
     let currentSection = 'pending';
     let currentState = 'pending';
     let currentOffset = 0;
     let eventsWired = false;
-    let rb = null;
 
     const $ = (sel) => view.querySelector(sel);
     const $$ = (sel) => Array.from(view.querySelectorAll(sel));
@@ -305,7 +352,18 @@ function createController(view) {
     let editingRuleId = null;
 
     function getConditionsFromBuilder() {
-        return rb.getConditionsFromDom($$('.jr-condition-row'));
+        const conditions = {};
+        $$('.jr-condition-row').forEach((row) => {
+            const type = row.dataset.conditionType;
+            if (type === 'community_rating_gte' || type === 'community_rating_lte') {
+                const val = row.querySelector('.jr-condition-number')?.value;
+                if (val !== '' && val != null) conditions[type] = parseFloat(val);
+            } else {
+                const selected = Array.from(row.querySelectorAll('.jr-chip.selected')).map((c) => c.dataset.chipValue);
+                if (selected.length) conditions[type] = selected;
+            }
+        });
+        return conditions;
     }
 
     function updateConditionPreview() {
@@ -331,13 +389,13 @@ function createController(view) {
             return;
         }
         const list = $('#jr-conditions-list');
-        list.insertAdjacentHTML('beforeend', rb.renderConditionRow(type, type.startsWith('community_rating') ? null : []));
+        list.insertAdjacentHTML('beforeend', renderConditionRow(type, type.startsWith('community_rating') ? null : []));
         select.value = '';
 
         const opt = select.querySelector(`option[value="${type}"]`);
         if (opt) opt.disabled = true;
 
-        const exclusive = rb.MUTUALLY_EXCLUSIVE[type];
+        const exclusive = MUTUALLY_EXCLUSIVE[type];
         if (exclusive) {
             const exOpt = select.querySelector(`option[value="${exclusive}"]`);
             if (exOpt) exOpt.disabled = true;
@@ -351,7 +409,7 @@ function createController(view) {
         row.remove();
         const opt = $(`#jr-add-condition-type option[value="${type}"]`);
         if (opt) opt.disabled = false;
-        const exclusive = rb.MUTUALLY_EXCLUSIVE[type];
+        const exclusive = MUTUALLY_EXCLUSIVE[type];
         if (exclusive && !$(`[data-condition-type="${exclusive}"]`)) {
             const exOpt = $(`#jr-add-condition-type option[value="${exclusive}"]`);
             if (exOpt) exOpt.disabled = false;
@@ -384,12 +442,12 @@ function createController(view) {
         try { conditions = JSON.parse(rule.conditionsJson); } catch {}
 
         for (const [type, value] of Object.entries(conditions)) {
-            if (!(type in rb.CONDITION_LABELS)) continue;
+            if (!(type in CONDITION_LABELS)) continue;
             const list = $('#jr-conditions-list');
-            list.insertAdjacentHTML('beforeend', rb.renderConditionRow(type, value));
+            list.insertAdjacentHTML('beforeend', renderConditionRow(type, value));
             const opt = $(`#jr-add-condition-type option[value="${type}"]`);
             if (opt) opt.disabled = true;
-            const exclusive = rb.MUTUALLY_EXCLUSIVE[type];
+            const exclusive = MUTUALLY_EXCLUSIVE[type];
             if (exclusive) {
                 const exOpt = $(`#jr-add-condition-type option[value="${exclusive}"]`);
                 if (exOpt) exOpt.disabled = true;
@@ -406,14 +464,13 @@ function createController(view) {
 
     async function loadRules() {
         try {
-            if (!rb) rb = await loadRuleBuilder();
             const rules = await Api.getRules();
             $('#jr-rules-list').innerHTML = rules.map((r) => `
                 <div class="jr-rule-row">
                     <span class="jr-rule-priority">${r.priority}</span>
                     <span class="jr-rule-name">${esc(r.name)}</span>
                     <span class="jr-rule-action jr-action-${r.action}">${r.action}</span>
-                    <span class="jr-rule-conditions">${rb.formatConditions(r.conditionsJson)}</span>
+                    <span class="jr-rule-conditions">${formatConditions(r.conditionsJson)}</span>
                     <button type="button" class="jr-btn jr-btn-secondary" data-rule-edit='${esc(JSON.stringify(r))}'>Edit</button>
                     <button type="button" class="jr-btn jr-btn-secondary" data-rule-toggle="${esc(r.id)}" data-rule-enabled="${!r.enabled}">${r.enabled ? 'Disable' : 'Enable'}</button>
                     <button type="button" class="jr-btn jr-btn-danger" data-rule-delete="${esc(r.id)}">Delete</button>
@@ -654,7 +711,6 @@ function createController(view) {
     return {
         bindEvents,
         async refresh() {
-            rb = await loadRuleBuilder();
             currentOffset = 0;
             currentState = 'pending';
             await loadStatus();
