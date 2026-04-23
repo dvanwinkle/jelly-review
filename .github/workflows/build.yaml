@@ -106,6 +106,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         working-directory: .
         env:
+          GH_TOKEN: ${{ github.token }}
           PLUGIN_GUID: a8b1c2d3-e4f5-6789-abcd-ef0123456789
           PLUGIN_NAME: JellyReview
           PLUGIN_CATEGORY: General
@@ -115,32 +116,42 @@ jobs:
           TARGET_ABI: 10.10.0.0
         run: |
           mkdir -p pages
-          VERSION="${GITHUB_REF_NAME#v}"
-          CHECKSUM="$(md5sum dist/Jellyfin.Plugin.JellyReview.zip | awk '{print $1}')"
-          SOURCE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Jellyfin.Plugin.JellyReview.zip"
-          TIMESTAMP="$(date -u '+%Y-%m-%d %H:%M:%S')"
-          cat > pages/manifest.json <<EOF
-          [
-            {
-              "category": "${PLUGIN_CATEGORY}",
-              "guid": "${PLUGIN_GUID}",
-              "name": "${PLUGIN_NAME}",
-              "description": "${PLUGIN_DESCRIPTION}",
-              "owner": "${PLUGIN_OWNER}",
-              "overview": "${PLUGIN_OVERVIEW}",
-              "versions": [
-                {
-                  "checksum": "${CHECKSUM}",
-                  "changelog": "Release ${GITHUB_REF_NAME}",
-                  "targetAbi": "${TARGET_ABI}",
-                  "sourceUrl": "${SOURCE_URL}",
-                  "timestamp": "${TIMESTAMP}",
-                  "version": "${VERSION}"
-                }
-              ]
-            }
-          ]
-          EOF
+          VERSIONS_JSON="[]"
+          for TAG in $(gh release list --json tagName --jq '.[].tagName' | sort -V); do
+            VERSION="${TAG#v}"
+            ZIP_NAME="Jellyfin.Plugin.JellyReview.zip"
+            SOURCE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ZIP_NAME}"
+            TIMESTAMP=$(gh release view "${TAG}" --json publishedAt --jq '.publishedAt' | sed 's/T/ /;s/Z//')
+            TMPZIP=$(mktemp)
+            if curl -sL -o "${TMPZIP}" "${SOURCE_URL}" && [ -s "${TMPZIP}" ]; then
+              CHECKSUM=$(md5sum "${TMPZIP}" | awk '{print $1}')
+            else
+              CHECKSUM=""
+            fi
+            rm -f "${TMPZIP}"
+            CHANGELOG=$(sed -n "/^## \[${VERSION}\]/,/^## \[/{/^## \[${VERSION}\]/d;/^## \[/d;p;}" CHANGELOG.md | sed '/^$/d' | head -50)
+            if [ -z "${CHANGELOG}" ]; then
+              CHANGELOG="Release ${TAG}"
+            fi
+            VERSIONS_JSON=$(echo "${VERSIONS_JSON}" | jq \
+              --arg cs "${CHECKSUM}" \
+              --arg cl "${CHANGELOG}" \
+              --arg abi "${TARGET_ABI}" \
+              --arg url "${SOURCE_URL}" \
+              --arg ts "${TIMESTAMP}" \
+              --arg ver "${VERSION}" \
+              '. + [{"checksum":$cs,"changelog":$cl,"targetAbi":$abi,"sourceUrl":$url,"timestamp":$ts,"version":$ver}]')
+          done
+          jq -n \
+            --arg cat "${PLUGIN_CATEGORY}" \
+            --arg guid "${PLUGIN_GUID}" \
+            --arg name "${PLUGIN_NAME}" \
+            --arg desc "${PLUGIN_DESCRIPTION}" \
+            --arg owner "${PLUGIN_OWNER}" \
+            --arg overview "${PLUGIN_OVERVIEW}" \
+            --argjson versions "${VERSIONS_JSON}" \
+            '[{"category":$cat,"guid":$guid,"name":$name,"description":$desc,"owner":$owner,"overview":$overview,"versions":$versions}]' \
+            > pages/manifest.json
 
       - name: Configure GitHub Pages
         if: startsWith(github.ref, 'refs/tags/v')
