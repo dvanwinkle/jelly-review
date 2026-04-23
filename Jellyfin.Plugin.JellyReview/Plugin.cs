@@ -39,6 +39,11 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         },
         new PluginPageInfo
         {
+            Name = "jellyreview-rule-builder.js",
+            EmbeddedResourcePath = $"{GetType().Namespace}.Web.Scripts.rule-builder.js"
+        },
+        new PluginPageInfo
+        {
             Name = "JellyReviewConfig",
             EmbeddedResourcePath = $"{GetType().Namespace}.Web.Pages.config.html"
         }

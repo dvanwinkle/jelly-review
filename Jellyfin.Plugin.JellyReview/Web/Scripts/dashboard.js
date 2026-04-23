@@ -8,7 +8,7 @@ import {
     renderConditionRow,
     getConditionsFromDom,
     formatConditions,
-} from './rule-builder.js';
+} from '/web/configurationpage?name=jellyreview-rule-builder.js';
 
 const PAGE_SIZE = 25;
 
