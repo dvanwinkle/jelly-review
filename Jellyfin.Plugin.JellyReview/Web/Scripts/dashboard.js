@@ -1,13 +1,16 @@
-const PAGE_SIZE = 25;
+import {
+    esc,
+    RATING_OPTIONS,
+    MEDIA_TYPE_OPTIONS,
+    GENRE_OPTIONS,
+    CONDITION_LABELS,
+    MUTUALLY_EXCLUSIVE,
+    renderConditionRow,
+    getConditionsFromDom,
+    formatConditions,
+} from './rule-builder.js';
 
-function esc(str) {
-    if (!str) return '';
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
+const PAGE_SIZE = 25;
 
 function makeApi() {
     const base = '/JellyReview';
@@ -286,6 +289,108 @@ function createController(view) {
         }
     }
 
+    let editingRuleId = null;
+
+    function getConditionsFromBuilder() {
+        return getConditionsFromDom($$('.jr-condition-row'));
+    }
+
+    function updateConditionPreview() {
+        const conditions = getConditionsFromBuilder();
+        const preview = $('#jr-rule-preview');
+        if (!preview) return;
+        const keys = Object.keys(conditions);
+        if (keys.length === 0) {
+            preview.style.display = 'none';
+        } else {
+            preview.style.display = 'block';
+            preview.textContent = JSON.stringify(conditions);
+        }
+    }
+
+    function addConditionType() {
+        const select = $('#jr-add-condition-type');
+        const type = select.value;
+        if (!type) return;
+        if ($(`[data-condition-type="${type}"]`)) {
+            showError('That condition is already added');
+            select.value = '';
+            return;
+        }
+        const list = $('#jr-conditions-list');
+        list.insertAdjacentHTML('beforeend', renderConditionRow(type, type.startsWith('community_rating') ? null : []));
+        select.value = '';
+
+        const opt = select.querySelector(`option[value="${type}"]`);
+        if (opt) opt.disabled = true;
+
+        const exclusive = MUTUALLY_EXCLUSIVE[type];
+        if (exclusive) {
+            const exOpt = select.querySelector(`option[value="${exclusive}"]`);
+            if (exOpt) exOpt.disabled = true;
+        }
+
+        updateConditionPreview();
+    }
+
+    function removeCondition(row) {
+        const type = row.dataset.conditionType;
+        row.remove();
+        const opt = $(`#jr-add-condition-type option[value="${type}"]`);
+        if (opt) opt.disabled = false;
+        const exclusive = MUTUALLY_EXCLUSIVE[type];
+        if (exclusive && !$(`[data-condition-type="${exclusive}"]`)) {
+            const exOpt = $(`#jr-add-condition-type option[value="${exclusive}"]`);
+            if (exOpt) exOpt.disabled = false;
+        }
+        updateConditionPreview();
+    }
+
+    function resetRuleBuilder() {
+        editingRuleId = null;
+        $('#jr-rule-name').value = '';
+        $('#jr-rule-action').value = 'auto_approve';
+        $('#jr-rule-priority').value = '100';
+        $('#jr-conditions-list').innerHTML = '';
+        $('#jr-rule-preview').style.display = 'none';
+        $('#jr-rule-builder-title').textContent = 'Add Rule';
+        $('#jr-rule-create').textContent = 'Add Rule';
+        $('#jr-rule-cancel').style.display = 'none';
+        $$('#jr-add-condition-type option').forEach((o) => { o.disabled = false; });
+    }
+
+    function populateBuilderForEdit(rule) {
+        editingRuleId = rule.id;
+        $('#jr-rule-name').value = rule.name;
+        $('#jr-rule-action').value = rule.action;
+        $('#jr-rule-priority').value = rule.priority;
+        $('#jr-conditions-list').innerHTML = '';
+        $$('#jr-add-condition-type option').forEach((o) => { o.disabled = false; });
+
+        let conditions = {};
+        try { conditions = JSON.parse(rule.conditionsJson); } catch {}
+
+        for (const [type, value] of Object.entries(conditions)) {
+            if (!(type in CONDITION_LABELS)) continue;
+            const list = $('#jr-conditions-list');
+            list.insertAdjacentHTML('beforeend', renderConditionRow(type, value));
+            const opt = $(`#jr-add-condition-type option[value="${type}"]`);
+            if (opt) opt.disabled = true;
+            const exclusive = MUTUALLY_EXCLUSIVE[type];
+            if (exclusive) {
+                const exOpt = $(`#jr-add-condition-type option[value="${exclusive}"]`);
+                if (exOpt) exOpt.disabled = true;
+            }
+        }
+
+        $('#jr-rule-builder-title').textContent = 'Edit Rule';
+        $('#jr-rule-create').textContent = 'Save Rule';
+        $('#jr-rule-cancel').style.display = '';
+        updateConditionPreview();
+
+        $('#jr-rule-builder').scrollIntoView({ behavior: 'smooth' });
+    }
+
     async function loadRules() {
         try {
             const rules = await Api.getRules();
@@ -294,7 +399,8 @@ function createController(view) {
                     <span class="jr-rule-priority">${r.priority}</span>
                     <span class="jr-rule-name">${esc(r.name)}</span>
                     <span class="jr-rule-action jr-action-${r.action}">${r.action}</span>
-                    <span class="jr-rule-conditions">${esc(r.conditionsJson)}</span>
+                    <span class="jr-rule-conditions">${formatConditions(r.conditionsJson)}</span>
+                    <button type="button" class="jr-btn jr-btn-secondary" data-rule-edit='${esc(JSON.stringify(r))}'>Edit</button>
                     <button type="button" class="jr-btn jr-btn-secondary" data-rule-toggle="${esc(r.id)}" data-rule-enabled="${!r.enabled}">${r.enabled ? 'Disable' : 'Enable'}</button>
                     <button type="button" class="jr-btn jr-btn-danger" data-rule-delete="${esc(r.id)}">Delete</button>
                 </div>
@@ -304,23 +410,29 @@ function createController(view) {
         }
     }
 
-    async function createRule() {
+    async function saveRule() {
         const name = $('#jr-rule-name').value.trim();
-        const conditionsJson = $('#jr-rule-conditions').value.trim();
-        if (!name || !conditionsJson) { showError('Rule name and conditions are required'); return; }
-        try { JSON.parse(conditionsJson); } catch { showError('Conditions must be valid JSON'); return; }
+        if (!name) { showError('Rule name is required'); return; }
+
+        const conditions = getConditionsFromBuilder();
+        if (Object.keys(conditions).length === 0) { showError('Add at least one condition'); return; }
+
+        const conditionsJson = JSON.stringify(conditions);
+        const action = $('#jr-rule-action').value;
+        const priority = parseInt($('#jr-rule-priority').value, 10) || 100;
+
         try {
-            await Api.createRule({
-                name,
-                action: $('#jr-rule-action').value,
-                priority: parseInt($('#jr-rule-priority').value, 10) || 100,
-                conditionsJson,
-                enabled: true,
-            });
-            showToast('Rule created');
+            if (editingRuleId) {
+                await Api.updateRule(editingRuleId, { name, action, priority, conditionsJson });
+                showToast('Rule updated');
+            } else {
+                await Api.createRule({ name, action, priority, conditionsJson, enabled: true });
+                showToast('Rule created');
+            }
+            resetRuleBuilder();
             await loadRules();
         } catch (e) {
-            showError('Failed to create rule: ' + e.message);
+            showError(`Failed to ${editingRuleId ? 'update' : 'create'} rule: ${e.message}`);
         }
     }
 
@@ -464,7 +576,12 @@ function createController(view) {
         $('#jr-bulk-approve')?.addEventListener('click', () => bulkAction('approve'));
         $('#jr-bulk-deny')?.addEventListener('click', () => bulkAction('deny'));
         $('#jr-bulk-defer')?.addEventListener('click', () => bulkAction('defer'));
-        $('#jr-rule-create')?.addEventListener('click', createRule);
+        $('#jr-rule-create')?.addEventListener('click', saveRule);
+        $('#jr-rule-cancel')?.addEventListener('click', resetRuleBuilder);
+        $('#jr-add-condition-type')?.addEventListener('change', addConditionType);
+        $('#jr-conditions-list')?.addEventListener('input', (event) => {
+            if (event.target.closest('.jr-condition-number')) updateConditionPreview();
+        });
         $('#jr-channel-create')?.addEventListener('click', createChannel);
         $('#jr-tags-save')?.addEventListener('click', saveTags);
         $('#jr-integrations-save')?.addEventListener('click', saveIntegrations);
@@ -488,6 +605,18 @@ function createController(view) {
                 loadMediaList();
                 return;
             }
+
+            const chip = event.target.closest('.jr-chip');
+            if (chip) { chip.classList.toggle('selected'); updateConditionPreview(); return; }
+
+            const removeCondBtn = event.target.closest('.jr-condition-remove');
+            if (removeCondBtn) { removeCondition(removeCondBtn.closest('.jr-condition-row')); return; }
+
+            const condNumInput = event.target.closest('.jr-condition-number');
+            if (condNumInput) { updateConditionPreview(); return; }
+
+            const editRuleBtn = event.target.closest('[data-rule-edit]');
+            if (editRuleBtn) { populateBuilderForEdit(JSON.parse(editRuleBtn.dataset.ruleEdit)); return; }
 
             const toggleBtn = event.target.closest('[data-rule-toggle]');
             if (toggleBtn) { toggleRule(toggleBtn.dataset.ruleToggle, toggleBtn.dataset.ruleEnabled === 'true'); return; }
