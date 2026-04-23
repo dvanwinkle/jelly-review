@@ -11,7 +11,7 @@ import {
     getConditionsFromDom,
     formatConditions,
     getExclusionTarget,
-} from '../Jellyfin.Plugin.JellyReview/Web/Scripts/rule-builder.js';
+} from './rule-builder-wrapper.js';
 
 describe('esc', () => {
     it('returns empty string for falsy input', () => {

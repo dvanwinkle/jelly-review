@@ -103,21 +103,7 @@ const JellyReviewRuleBuilder = {
     getExclusionTarget,
 };
 
-// Attach to window for Jellyfin runtime
+// Attach to window for Jellyfin runtime (loaded as a plain <script> tag)
 if (typeof window !== 'undefined') {
     window.JellyReviewRuleBuilder = JellyReviewRuleBuilder;
 }
-
-// ES module exports for tests
-export {
-    esc,
-    RATING_OPTIONS,
-    MEDIA_TYPE_OPTIONS,
-    GENRE_OPTIONS,
-    CONDITION_LABELS,
-    MUTUALLY_EXCLUSIVE,
-    renderConditionRow,
-    getConditionsFromDom,
-    formatConditions,
-    getExclusionTarget,
-};

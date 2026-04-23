@@ -4,7 +4,11 @@ function loadRuleBuilder() {
     return new Promise((resolve, reject) => {
         if (window.JellyReviewRuleBuilder) { resolve(window.JellyReviewRuleBuilder); return; }
         const script = document.createElement('script');
-        script.src = '/web/configurationpage?name=jellyreview-rule-builder.js';
+        if (window.ApiClient) {
+            script.src = window.ApiClient.getUrl('/web/configurationpage', { name: 'jellyreview-rule-builder.js' });
+        } else {
+            script.src = '/web/configurationpage?name=jellyreview-rule-builder.js';
+        }
         script.onload = () => resolve(window.JellyReviewRuleBuilder);
         script.onerror = () => reject(new Error('Failed to load rule-builder.js'));
         document.head.appendChild(script);
@@ -402,6 +406,7 @@ function createController(view) {
 
     async function loadRules() {
         try {
+            if (!rb) rb = await loadRuleBuilder();
             const rules = await Api.getRules();
             $('#jr-rules-list').innerHTML = rules.map((r) => `
                 <div class="jr-rule-row">
