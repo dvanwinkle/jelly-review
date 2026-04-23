@@ -1,5 +1,17 @@
 const PAGE_SIZE = 25;
 
+function toCamel(obj) {
+    if (Array.isArray(obj)) return obj.map(toCamel);
+    if (obj && typeof obj === 'object') {
+        const out = {};
+        for (const [k, v] of Object.entries(obj)) {
+            out[k[0].toLowerCase() + k.slice(1)] = toCamel(v);
+        }
+        return out;
+    }
+    return obj;
+}
+
 function loadScript(name) {
     return new Promise((resolve, reject) => {
         const script = document.createElement('script');
@@ -45,7 +57,7 @@ function makeApi() {
             throw new Error(`${resp.status}: ${text}`);
         }
         if (resp.status === 204) return null;
-        return resp.json();
+        return resp.json().then(toCamel);
     }
 
     return {
