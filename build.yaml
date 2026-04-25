@@ -1,7 +1,7 @@
 ---
 name: "JellyReview"
 guid: "a8b1c2d3-e4f5-6789-abcd-ef0123456789"
-version: "0.0.3"
+version: "0.0.4"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "dvanwinkle"
@@ -14,5 +14,7 @@ category: "Administration"
 artifacts:
   - "Jellyfin.Plugin.JellyReview.dll"
 changelog: |-
-  - Reapply automatic review rules after Jellyfin metadata update events so newly imported movies are evaluated once ratings and genres are available.
-  - Preserve manual review decisions while allowing prior automatic import decisions to be updated by later sync passes.
+  - Align JellyReview configuration pages with Jellyfin's native plugin page layout to prevent collisions with the dashboard navigation bar.
+  - Centralize plugin release metadata in Directory.Build.props and build.yaml.
+  - Add a solution file for C# IDE tooling.
+  - Generate plugin repository manifest versions from newest to oldest.

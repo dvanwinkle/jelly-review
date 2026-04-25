@@ -117,7 +117,7 @@ jobs:
         run: |
           mkdir -p pages
           VERSIONS_JSON="[]"
-          for TAG in $(gh release list --json tagName --jq '.[].tagName' | sort -V); do
+          for TAG in $(gh release list --json tagName --jq '.[].tagName' | sort -Vr); do
             VERSION="${TAG#v}"
             ZIP_NAME="Jellyfin.Plugin.JellyReview.zip"
             SOURCE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ZIP_NAME}"
