@@ -2,7 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.0.3] - 2026-04-25
+
+### Fixed
+
+- Reapply automatic review rules after Jellyfin metadata update events so newly imported movies are evaluated once ratings and genres are available.
+- Preserve manual review decisions while allowing prior automatic import decisions to be updated by later sync passes.
 
 ## [0.0.2] - 2026-04-23
 
@@ -38,3 +48,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - HMAC-signed action tokens for approve/deny from notifications
 - Embedded dashboard with queue, history, profiles, rules, notifications, and settings tabs
 - Plugin repository manifest via GitHub Pages
+
+[Unreleased]: https://github.com/dvanwinkle/jelly-review/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/dvanwinkle/jelly-review/compare/v0.0.2...v0.0.3
+[0.0.2]: https://github.com/dvanwinkle/jelly-review/compare/v0.0.1...v0.0.2
+[0.0.1]: https://github.com/dvanwinkle/jelly-review/releases/tag/v0.0.1

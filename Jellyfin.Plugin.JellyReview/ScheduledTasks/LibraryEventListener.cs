@@ -32,6 +32,7 @@ public class LibraryEventListener : IHostedService
     public Task StartAsync(CancellationToken cancellationToken)
     {
         _libraryManager.ItemAdded += OnItemAdded;
+        _libraryManager.ItemUpdated += OnItemUpdated;
         _logger.LogInformation("JellyReview: library event listener started");
         return Task.CompletedTask;
     }
@@ -39,6 +40,7 @@ public class LibraryEventListener : IHostedService
     public Task StopAsync(CancellationToken cancellationToken)
     {
         _libraryManager.ItemAdded -= OnItemAdded;
+        _libraryManager.ItemUpdated -= OnItemUpdated;
         return Task.CompletedTask;
     }
 
@@ -58,6 +60,22 @@ public class LibraryEventListener : IHostedService
         catch (Exception ex)
         {
             _logger.LogError(ex, "JellyReview: unhandled error processing ItemAdded for {ItemId}", e.Item.Id);
+        }
+    }
+
+    // Metadata providers often populate ratings/genres after the initial ItemAdded event.
+    private async void OnItemUpdated(object? sender, ItemChangeEventArgs e)
+    {
+        if (e.Item is not (Movie or Series)) return;
+        if (_tagManager.IsTagWriteInFlight(e.Item.Id)) return;
+
+        try
+        {
+            await _syncService.HandleNewItemAsync(e.Item).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "JellyReview: unhandled error processing ItemUpdated for {ItemId}", e.Item.Id);
         }
     }
 }

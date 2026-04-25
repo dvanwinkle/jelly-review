@@ -57,7 +57,11 @@ public class SyncService
         using var conn = _db.CreateConnection();
         var existingDecision = GetDecision(conn, record.Id);
 
-        if (existingDecision != null) return; // already processed
+        if (existingDecision != null)
+        {
+            await ReapplyRulesIfEligibleAsync(item, record, existingDecision).ConfigureAwait(false);
+            return;
+        }
 
         // Determine initial state from existing tags
         var tags = item.Tags ?? Array.Empty<string>();
@@ -73,7 +77,7 @@ public class SyncService
             initialState = "pending";
         else if (Config.AutoRulesEnabled)
         {
-            var (action, matchedRule) = await _ruleEngine.EvaluateAsync(record).ConfigureAwait(false);
+            var (action, matchedRule) = await EvaluateAutoRulesAsync(record).ConfigureAwait(false);
             initialState = RuleActionToState(action);
             source = "auto_rule";
 
@@ -101,6 +105,41 @@ public class SyncService
 
         if (initialState == "pending")
             await _notifications.NotifyPendingReviewAsync(record.Id).ConfigureAwait(false);
+    }
+
+    private async Task ReapplyRulesIfEligibleAsync(BaseItem item, MediaRecord record, ReviewDecision existingDecision)
+    {
+        if (!Config.AutoRulesEnabled) return;
+        if (!AutoReapplySources.Contains(existingDecision.Source)) return;
+
+        var (action, _) = await EvaluateAutoRulesAsync(record).ConfigureAwait(false);
+        var newState = RuleActionToState(action);
+        var source = "auto_rule";
+
+        if (newState == existingDecision.State) return;
+
+        await _db.ExecuteWriteAsync(async writeConn =>
+        {
+            UpdateDecision(writeConn, existingDecision.Id, newState, source);
+            InsertHistory(writeConn, record.Id, existingDecision.State, newState, "sync_reapply_rules", "system");
+            await Task.CompletedTask;
+        }).ConfigureAwait(false);
+
+        if (newState is "approved" or "denied")
+        {
+            await _tagManager.ApplyDecisionTagsAsync(item.Id, newState).ConfigureAwait(false);
+        }
+        else
+        {
+            await _tagManager.ApplyPendingTagAsync(item.Id).ConfigureAwait(false);
+            await _notifications.NotifyPendingReviewAsync(record.Id).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<(string? Action, ReviewRule? MatchedRule)> EvaluateAutoRulesAsync(MediaRecord record)
+    {
+        await _ruleEngine.SeedStarterRulesAsync().ConfigureAwait(false);
+        return await _ruleEngine.EvaluateAsync(record).ConfigureAwait(false);
     }
 
     /// Looks up the Jellyfin item ID for a media record and applies decision tags.
@@ -156,7 +195,14 @@ public class SyncService
                 }
                 else
                 {
-                    await UpsertMediaRecordAsync(item, isNew: false).ConfigureAwait(false);
+                    var record = await UpsertMediaRecordAsync(item, isNew: false).ConfigureAwait(false);
+                    if (record != null)
+                    {
+                        using var conn = _db.CreateConnection();
+                        var existingDecision = GetDecision(conn, record.Id);
+                        if (existingDecision != null)
+                            await ReapplyRulesIfEligibleAsync(item, record, existingDecision).ConfigureAwait(false);
+                    }
                 }
             }
             catch (Exception ex)
@@ -447,14 +493,36 @@ public class SyncService
         cmd.ExecuteNonQuery();
     }
 
+    private static void UpdateDecision(SqliteConnection conn, string decisionId, string state, string source)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            UPDATE review_decisions
+            SET state = @state,
+                source = @source,
+                updated_at = datetime('now')
+            WHERE id = @id";
+        cmd.Parameters.AddWithValue("@id", decisionId);
+        cmd.Parameters.AddWithValue("@state", state);
+        cmd.Parameters.AddWithValue("@source", source);
+        cmd.ExecuteNonQuery();
+    }
+
     private static ReviewDecision? GetDecision(SqliteConnection conn, string mediaRecordId)
     {
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id FROM review_decisions WHERE media_record_id = @id LIMIT 1";
+        cmd.CommandText = "SELECT id, state, source FROM review_decisions WHERE media_record_id = @id LIMIT 1";
         cmd.Parameters.AddWithValue("@id", mediaRecordId);
-        var result = cmd.ExecuteScalar();
-        if (result == null) return null;
-        return new ReviewDecision { Id = result.ToString()!, MediaRecordId = mediaRecordId };
+        using var reader = cmd.ExecuteReader();
+        if (!reader.Read()) return null;
+
+        return new ReviewDecision
+        {
+            Id = reader.GetString(0),
+            MediaRecordId = mediaRecordId,
+            State = reader.GetString(1),
+            Source = reader.GetString(2),
+        };
     }
 
     private static IEnumerable<BaseItem> GetParentChain(BaseItem item)
