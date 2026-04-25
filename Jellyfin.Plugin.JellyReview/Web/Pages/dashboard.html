@@ -1,16 +1,18 @@
-<div data-role="page" class="page type-interior pluginConfigurationPage" id="jellyReviewPage" data-controller="__plugin/jellyreview-dashboard.js">
+<div data-role="page" class="page type-interior pluginConfigurationPage withTabs" id="jellyReviewPage" data-controller="__plugin/jellyreview-dashboard.js">
     <div data-role="content">
+        <div class="content-primary jr-content-primary">
         <style>
             #jellyReviewPage, #jellyReviewPage * { box-sizing: border-box; }
             #jellyReviewPage { color: #e5e7eb; }
-            #jellyReviewPage #jr-app { display: flex; flex-direction: column; min-height: calc(100vh - 5rem); background: #101826; color: #e5e7eb; border-radius: 18px; overflow: hidden; }
-            #jellyReviewPage #jr-header { background: linear-gradient(180deg, #18263a 0%, #131d2b 100%); padding: 18px 96px 18px 24px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #233247; flex-wrap: wrap; }
-            #jellyReviewPage #jr-header h1 { margin: 0; font-size: 28px; line-height: 1.1; color: #f8fafc; font-weight: 700; }
+            #jellyReviewPage .jr-content-primary { max-width: none; }
+            #jellyReviewPage #jr-app { display: flex; flex-direction: column; min-height: calc(100vh - 12rem); background: #101826; color: #e5e7eb; border-radius: 8px; overflow: hidden; }
+            #jellyReviewPage #jr-header { background: #18263a; padding: 18px 96px 18px 24px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #233247; flex-wrap: wrap; }
+            #jellyReviewPage #jr-header h1 { margin: 0; font-size: 24px; line-height: 1.1; color: #f8fafc; font-weight: 700; letter-spacing: 0; }
             #jellyReviewPage #jr-version { font-size: 12px; color: #94a3b8; }
             #jellyReviewPage #jr-status-badge { background: #1d4ed8; color: #eff6ff; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            #jellyReviewPage #jr-nav { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 24px; background: #131d2b; border-bottom: 1px solid #233247; }
-            #jellyReviewPage .jr-nav-btn { appearance: none; border: 1px solid #334155; background: #1e293b; color: #cbd5e1; border-radius: 999px; padding: 10px 14px; cursor: pointer; font-size: 13px; font-weight: 600; }
-            #jellyReviewPage .jr-nav-btn.active { background: #0ea5e9; border-color: #0ea5e9; color: #082f49; }
+            #jellyReviewPage #jr-nav { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 24px; background: #131d2b; border-bottom: 1px solid #233247; }
+            #jellyReviewPage .jr-nav-btn { appearance: none; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #cbd5e1; border-radius: 0; padding: 14px 12px 11px; cursor: pointer; font-size: 13px; font-weight: 600; min-height: 44px; }
+            #jellyReviewPage .jr-nav-btn.active { border-bottom-color: #00a4dc; color: #fff; }
             #jellyReviewPage #jr-content { padding: 24px; overflow-y: auto; }
             #jellyReviewPage .jr-section { display: none; }
             #jellyReviewPage #jr-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
@@ -223,6 +225,7 @@
         </div>
 
         <div id="jr-toast" class="jr-toast"></div>
+        </div>
     </div>
 
 </div>

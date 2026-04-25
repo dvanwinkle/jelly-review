@@ -1,0 +1,18 @@
+---
+name: "JellyReview"
+guid: "a8b1c2d3-e4f5-6789-abcd-ef0123456789"
+version: "0.0.3"
+targetAbi: "10.11.0.0"
+framework: "net9.0"
+owner: "dvanwinkle"
+overview: "Parental media review workflow for Jellyfin"
+description: >
+  JellyReview holds newly added movies and series for parent approval before
+  child users can access them, using Jellyfin's built-in tag-based parental
+  controls, automatic review rules, notifications, and audit history.
+category: "Administration"
+artifacts:
+  - "Jellyfin.Plugin.JellyReview.dll"
+changelog: |-
+  - Reapply automatic review rules after Jellyfin metadata update events so newly imported movies are evaluated once ratings and genres are available.
+  - Preserve manual review decisions while allowing prior automatic import decisions to be updated by later sync passes.

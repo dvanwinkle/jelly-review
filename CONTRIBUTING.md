@@ -32,6 +32,12 @@ Copy the contents of `publish/` into your Jellyfin plugins directory (e.g. `conf
 3. Test the plugin in a running Jellyfin instance.
 4. Open a pull request with a clear description of what you changed and why.
 
+## Release Metadata
+
+- Every code change must update `CHANGELOG.md` under `## [Unreleased]`.
+- When creating a release tag, convert the unreleased changelog notes into the tagged version section.
+- Keep `Directory.Build.props` and `build.yaml` in sync with the released plugin version and metadata.
+
 ## Reporting Issues
 
 - Use the **Bug Report** template for bugs.

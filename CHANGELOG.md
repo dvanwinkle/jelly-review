@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Align JellyReview configuration pages with Jellyfin's native plugin page layout to prevent collisions with the dashboard navigation bar.
+
+### Changed
+
+- Centralize plugin release metadata in `Directory.Build.props` and `build.yaml`.
+- Add a solution file for C# IDE tooling.
+
 ## [0.0.3] - 2026-04-25
 
 ### Fixed

@@ -3,8 +3,6 @@
     <TargetFramework>net9.0</TargetFramework>
     <AssemblyName>Jellyfin.Plugin.JellyReview</AssemblyName>
     <RootNamespace>Jellyfin.Plugin.JellyReview</RootNamespace>
-    <Version>0.0.1</Version>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
