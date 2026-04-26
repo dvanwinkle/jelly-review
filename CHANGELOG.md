@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add missing Jellyfin plugin template scaffolding, including `jellyfin.ruleset`, Renovate configuration, VS Code workspace tasks, and reusable Jellyfin workflow files.
+
+### Changed
+
+- Disable the Jellyfin upstream publish workflow until deploy secrets are configured.
+
+### Fixed
+
+- Correct review action toast text so deny actions display "Denied successfully" instead of "Denyd successfully".
+
 ## [0.0.4] - 2026-04-25
 
 ### Fixed

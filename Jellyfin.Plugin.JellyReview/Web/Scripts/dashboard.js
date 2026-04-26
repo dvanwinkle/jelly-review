@@ -113,6 +113,15 @@ function createController(view) {
 
     function showError(msg) { showToast(msg, true); }
 
+    function pastTenseAction(action) {
+        return {
+            approve: 'approved',
+            deny: 'denied',
+            defer: 'deferred',
+            reopen: 'reopened',
+        }[action] || `${action}d`;
+    }
+
     function closeHistoryModal() {
         const modal = $('#jr-history-modal');
         if (modal) modal.style.display = 'none';
@@ -235,7 +244,8 @@ function createController(view) {
             await Api[action](itemId);
             await loadCounts();
             await loadMediaList();
-            showToast(`${action.charAt(0).toUpperCase() + action.slice(1)}d successfully`);
+            const actionText = pastTenseAction(action);
+            showToast(`${actionText.charAt(0).toUpperCase() + actionText.slice(1)} successfully`);
         } catch (e) {
             showError(`Failed to ${action}: ${e.message}`);
         }
@@ -246,7 +256,7 @@ function createController(view) {
         if (!checked.length) { showError('No items selected'); return; }
         try {
             const r = await Api.bulk({ itemIds: checked, action });
-            showToast(`${r.succeeded} item(s) ${action}d`);
+            showToast(`${r.succeeded} item(s) ${pastTenseAction(action)}`);
             await loadCounts();
             await loadMediaList();
         } catch (e) {

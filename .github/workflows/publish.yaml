@@ -1,0 +1,23 @@
+name: '🚀 Publish Plugin'
+
+on:
+  # Disabled for now. This template workflow expects Jellyfin deploy secrets
+  # (DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY) that this repo does not use yet.
+  workflow_dispatch:
+    inputs:
+      disabled:
+        description: 'This workflow is intentionally disabled.'
+        required: true
+        default: 'true'
+
+jobs:
+  call:
+    if: ${{ false }}
+    uses: jellyfin/jellyfin-meta-plugins/.github/workflows/publish.yaml@master
+    with:
+      version: ${{ github.event.release.tag_name }}
+      is-unstable: ${{ github.event.release.prerelease }}
+    secrets:
+      deploy-host: ${{ secrets.DEPLOY_HOST }}
+      deploy-user: ${{ secrets.DEPLOY_USER }}
+      deploy-key: ${{ secrets.DEPLOY_KEY }}
