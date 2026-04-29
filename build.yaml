@@ -1,7 +1,7 @@
 ---
 name: "JellyReview"
 guid: "a8b1c2d3-e4f5-6789-abcd-ef0123456789"
-version: "0.0.4"
+version: "0.1.0"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "dvanwinkle"
@@ -14,7 +14,10 @@ category: "Administration"
 artifacts:
   - "Jellyfin.Plugin.JellyReview.dll"
 changelog: |-
-  - Align JellyReview configuration pages with Jellyfin's native plugin page layout to prevent collisions with the dashboard navigation bar.
-  - Centralize plugin release metadata in Directory.Build.props and build.yaml.
-  - Add a solution file for C# IDE tooling.
-  - Generate plugin repository manifest versions from newest to oldest.
+  - Add per-profile review decisions, tag enforcement, dashboard filtering, and many-to-many rule assignments.
+  - Add an approved-item allow tag and configure viewer profiles with Jellyfin's allowed-tags parental control.
+  - Add missing Jellyfin plugin template scaffolding, Renovate configuration, VS Code workspace tasks, and CI workflow files.
+  - Remove the reusable Jellyfin changelog workflow in favor of the existing explicit changelog and tag release flow.
+  - Disable the Jellyfin upstream publish workflow until deploy secrets are configured.
+  - Store JellyReview parental-control tags as separate Jellyfin preference values instead of a pipe-delimited tag.
+  - Correct review action toast text so deny actions display "Denied successfully" instead of "Denyd successfully".
