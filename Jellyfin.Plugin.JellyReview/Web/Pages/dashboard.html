@@ -136,7 +136,7 @@
                     <div id="jr-profiles-list"></div>
                     <div class="jr-settings-group" style="margin-top:16px">
                         <h3>Setup Checklist</h3>
-                        <p>For each child user in Jellyfin, enable parental controls:<br><strong>User → Parental Control → Block content with tags → add <code>jelly-guard-pending</code></strong><br>This blocks all unreviewed items. Approved items have the tag removed automatically.</p>
+                        <p>For each child user in Jellyfin, create a viewer profile to automatically configure parental controls:<br><strong>Block content with tags</strong> for pending/denied items and <strong>Allow items with tags</strong> for approved items.</p>
                     </div>
                 </div>
 
@@ -195,6 +195,7 @@
                         <h3>Tag Names</h3>
                         <div class="jr-settings-row"><label>Pending Tag</label><input type="text" id="jr-setting-pending-tag"></div>
                         <div class="jr-settings-row"><label>Denied Tag</label><input type="text" id="jr-setting-denied-tag"></div>
+                        <div class="jr-settings-row"><label>Allowed Tag</label><input type="text" id="jr-setting-allowed-tag"></div>
                         <button type="button" class="jr-btn jr-btn-approve" id="jr-tags-save">Save Tags</button>
                     </div>
                     <div class="jr-settings-group">

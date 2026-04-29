@@ -542,6 +542,7 @@ function createController(view) {
             const s = await Api.getSettings();
             $('#jr-setting-pending-tag').value = s.pendingTag;
             $('#jr-setting-denied-tag').value = s.deniedTag;
+            $('#jr-setting-allowed-tag').value = s.allowedTag;
             $('#jr-setting-polling').value = s.pollingIntervalSeconds;
             $('#jr-setting-auto-rules').checked = s.autoRulesEnabled;
         } catch (e) { showError('Failed to load settings: ' + e.message); }
@@ -552,6 +553,7 @@ function createController(view) {
             await Api.updateTags({
                 pendingTag: $('#jr-setting-pending-tag').value.trim(),
                 deniedTag: $('#jr-setting-denied-tag').value.trim(),
+                allowedTag: $('#jr-setting-allowed-tag').value.trim(),
             });
             showToast('Tags saved');
         } catch (e) { showError('Failed to save tags: ' + e.message); }

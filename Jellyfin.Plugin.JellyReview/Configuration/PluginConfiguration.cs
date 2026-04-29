@@ -8,6 +8,8 @@ public class PluginConfiguration : BasePluginConfiguration
 
     public string DeniedTag { get; set; } = "jelly-guard-denied";
 
+    public string AllowedTag { get; set; } = "jelly-review-allow";
+
     public int PollingIntervalSeconds { get; set; } = 300;
 
     public bool AutoRulesEnabled { get; set; } = true;

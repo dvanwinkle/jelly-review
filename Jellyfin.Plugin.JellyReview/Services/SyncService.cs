@@ -67,6 +67,7 @@ public class SyncService
         var tags = item.Tags ?? Array.Empty<string>();
         bool hasPending = tags.Contains(Config.PendingTag);
         bool hasDenied = tags.Contains(Config.DeniedTag);
+        bool hasAllowed = tags.Contains(Config.AllowedTag);
 
         string? initialState = null;
         string source = "sync_reconciliation";
@@ -75,6 +76,8 @@ public class SyncService
             initialState = "denied";
         else if (hasPending)
             initialState = "pending";
+        else if (hasAllowed)
+            initialState = "approved";
         else if (Config.AutoRulesEnabled)
         {
             var (action, matchedRule) = await EvaluateAutoRulesAsync(record).ConfigureAwait(false);
@@ -168,6 +171,22 @@ public class SyncService
         if (string.IsNullOrEmpty(state)) return;
         if (Guid.TryParse(jellyfinItemId, out var itemGuid))
             await _tagManager.ApplyDecisionTagsAsync(itemGuid, state).ConfigureAwait(false);
+    }
+
+    public async Task ApplyTagsForAllDecisionRecordsAsync()
+    {
+        var mediaRecordIds = new List<string>();
+        using (var conn = _db.CreateConnection())
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT DISTINCT media_record_id FROM review_decisions";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+                mediaRecordIds.Add(reader.GetString(0));
+        }
+
+        foreach (var mediaRecordId in mediaRecordIds)
+            await ApplyTagsForItemAsync(mediaRecordId).ConfigureAwait(false);
     }
 
     public async Task<SyncResult> RunIncrementalSyncAsync(CancellationToken cancellationToken = default)

@@ -13,6 +13,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     {
         serviceCollection.AddSingleton<DatabaseManager>();
         serviceCollection.AddSingleton<TagManager>();
+        serviceCollection.AddSingleton<ParentalControlService>();
         serviceCollection.AddSingleton<RuleEngine>();
         serviceCollection.AddSingleton<ReviewService>();
         serviceCollection.AddSingleton<NotificationService>();

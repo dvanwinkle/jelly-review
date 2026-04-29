@@ -44,7 +44,7 @@ Auto-review rules can handle common cases automatically — for example, auto-ap
 ## Setup
 
 1. Open the **JellyReview** page from the Jellyfin sidebar (visible to admin users only).
-2. Go to the **Profiles** tab and create viewer profiles for each child user. This automatically configures their blocked tags.
+2. Go to the **Profiles** tab and create viewer profiles for each child user. This automatically configures blocked tags for pending/denied items and an allowed tag for approved items.
 3. Optionally configure **Rules** to auto-approve or auto-deny based on content ratings.
 4. Optionally add **Notification** channels to get alerted when items need review.
 

@@ -9,6 +9,8 @@ public class PluginSettingsDto
     public string PendingTag { get; set; } = string.Empty;
     [JsonPropertyName("deniedTag")]
     public string DeniedTag { get; set; } = string.Empty;
+    [JsonPropertyName("allowedTag")]
+    public string AllowedTag { get; set; } = string.Empty;
     [JsonPropertyName("pollingIntervalSeconds")]
     public int PollingIntervalSeconds { get; set; }
     [JsonPropertyName("autoRulesEnabled")]
@@ -23,6 +25,8 @@ public class UpdateTagsRequest
     public string? PendingTag { get; set; }
     [JsonPropertyName("deniedTag")]
     public string? DeniedTag { get; set; }
+    [JsonPropertyName("allowedTag")]
+    public string? AllowedTag { get; set; }
 }
 
 public class UpdateLibrariesRequest

@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Jellyfin.Api.Constants;
-using Jellyfin.Database.Implementations.Entities;
-using Jellyfin.Database.Implementations.Enums;
 using Jellyfin.Plugin.JellyReview.Api.Dtos;
 using Jellyfin.Plugin.JellyReview.Data;
 using Jellyfin.Plugin.JellyReview.Services;
@@ -25,13 +23,20 @@ public class ReviewController : ControllerBase
     private readonly SyncService _syncService;
     private readonly DatabaseManager _db;
     private readonly IUserManager _userManager;
+    private readonly ParentalControlService _parentalControlService;
 
-    public ReviewController(ReviewService reviewService, SyncService syncService, DatabaseManager db, IUserManager userManager)
+    public ReviewController(
+        ReviewService reviewService,
+        SyncService syncService,
+        DatabaseManager db,
+        IUserManager userManager,
+        ParentalControlService parentalControlService)
     {
         _reviewService = reviewService;
         _syncService = syncService;
         _db = db;
         _userManager = userManager;
+        _parentalControlService = parentalControlService;
     }
 
     [HttpPost("{itemId}/approve")]
@@ -190,7 +195,7 @@ public class ReviewController : ControllerBase
         var profile = LoadViewerProfile(id);
 
         if (!string.IsNullOrEmpty(req.JellyfinUserId) && Guid.TryParse(req.JellyfinUserId, out var userGuid))
-            await ApplyBlockedTagAsync(userGuid).ConfigureAwait(false);
+            await _parentalControlService.ApplyTagPreferencesAsync(userGuid).ConfigureAwait(false);
 
         return CreatedAtAction(nameof(GetViewerProfiles), MapProfile(profile!));
     }
@@ -285,31 +290,4 @@ public class ReviewController : ControllerBase
         Id = p.Id, DisplayName = p.DisplayName, JellyfinUserId = p.JellyfinUserId,
         AgeHint = p.AgeHint, IsActive = p.IsActive, CreatedAt = p.CreatedAt
     };
-
-    private async Task ApplyBlockedTagAsync(Guid jellyfinUserId)
-    {
-        var user = _userManager.GetUserById(jellyfinUserId);
-        if (user is null) return;
-
-        var config = Plugin.Instance!.Configuration;
-        var tagsToBlock = new[] { config.PendingTag, config.DeniedTag };
-        var pref = user.Preferences.FirstOrDefault(p => p.Kind == PreferenceKind.BlockedTags);
-
-        if (pref is null)
-        {
-            user.Preferences.Add(new Preference(PreferenceKind.BlockedTags, string.Join('|', tagsToBlock)));
-        }
-        else
-        {
-            var tags = pref.Value.Split('|', StringSplitOptions.RemoveEmptyEntries).ToList();
-            foreach (var tag in tagsToBlock)
-            {
-                if (!tags.Contains(tag, StringComparer.OrdinalIgnoreCase))
-                    tags.Add(tag);
-            }
-            pref.Value = string.Join('|', tags);
-        }
-
-        await _userManager.UpdateUserAsync(user).ConfigureAwait(false);
-    }
 }

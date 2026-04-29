@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add missing Jellyfin plugin template scaffolding, including `jellyfin.ruleset`, Renovate configuration, VS Code workspace tasks, and reusable Jellyfin workflow files.
+- Add an approved-item allow tag and configure viewer profiles with Jellyfin's allowed-tags parental control.
 
 ### Changed
 
@@ -17,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Store JellyReview parental-control tags as separate Jellyfin preference values instead of a pipe-delimited tag.
 - Correct review action toast text so deny actions display "Denied successfully" instead of "Denyd successfully".
 
 ## [0.0.4] - 2026-04-25

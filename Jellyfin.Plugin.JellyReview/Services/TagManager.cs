@@ -54,9 +54,16 @@ public class TagManager
             if (item == null) return;
 
             var tags = item.Tags?.ToList() ?? new List<string>();
+            var changed = false;
             if (!tags.Contains(Config.PendingTag))
             {
                 tags.Add(Config.PendingTag);
+                changed = true;
+            }
+
+            changed |= tags.Remove(Config.AllowedTag);
+            if (changed)
+            {
                 item.Tags = tags.ToArray();
                 await _libraryManager.UpdateItemAsync(
                     item, item.GetParent(), ItemUpdateType.MetadataEdit, CancellationToken.None)
@@ -101,9 +108,12 @@ public class TagManager
                 case "approved":
                     tags.Remove(Config.PendingTag);
                     tags.Remove(Config.DeniedTag);
+                    if (!tags.Contains(Config.AllowedTag))
+                        tags.Add(Config.AllowedTag);
                     break;
                 case "denied":
                     tags.Remove(Config.PendingTag);
+                    tags.Remove(Config.AllowedTag);
                     if (!tags.Contains(Config.DeniedTag))
                         tags.Add(Config.DeniedTag);
                     break;
@@ -111,12 +121,14 @@ public class TagManager
                     if (!tags.Contains(Config.PendingTag))
                         tags.Add(Config.PendingTag);
                     tags.Remove(Config.DeniedTag);
+                    tags.Remove(Config.AllowedTag);
                     break;
                 case "deferred":
                     // keep PendingTag so child cannot see until final decision
                     if (!tags.Contains(Config.PendingTag))
                         tags.Add(Config.PendingTag);
                     tags.Remove(Config.DeniedTag);
+                    tags.Remove(Config.AllowedTag);
                     break;
                 default:
                     return;
@@ -160,7 +172,7 @@ public class TagManager
             if (item == null) return;
 
             var tags = (item.Tags ?? Array.Empty<string>())
-                .Where(t => t != Config.PendingTag && t != Config.DeniedTag)
+                .Where(t => t != Config.PendingTag && t != Config.DeniedTag && t != Config.AllowedTag)
                 .ToArray();
 
             item.Tags = tags;

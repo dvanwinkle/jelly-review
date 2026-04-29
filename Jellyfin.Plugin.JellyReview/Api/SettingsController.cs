@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Jellyfin.Api.Constants;
 using Jellyfin.Plugin.JellyReview.Api.Dtos;
 using Jellyfin.Plugin.JellyReview.Configuration;
+using Jellyfin.Plugin.JellyReview.Services;
 using MediaBrowser.Controller.Library;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -16,10 +18,17 @@ namespace Jellyfin.Plugin.JellyReview.Api;
 public class SettingsController : ControllerBase
 {
     private readonly ILibraryManager _libraryManager;
+    private readonly ParentalControlService _parentalControlService;
+    private readonly SyncService _syncService;
 
-    public SettingsController(ILibraryManager libraryManager)
+    public SettingsController(
+        ILibraryManager libraryManager,
+        ParentalControlService parentalControlService,
+        SyncService syncService)
     {
         _libraryManager = libraryManager;
+        _parentalControlService = parentalControlService;
+        _syncService = syncService;
     }
 
     private PluginConfiguration Config => Plugin.Instance.Configuration;
@@ -32,6 +41,7 @@ public class SettingsController : ControllerBase
         {
             PendingTag = Config.PendingTag,
             DeniedTag = Config.DeniedTag,
+            AllowedTag = Config.AllowedTag,
             PollingIntervalSeconds = Config.PollingIntervalSeconds,
             AutoRulesEnabled = Config.AutoRulesEnabled,
             SelectedLibraryIds = Config.SelectedLibraryIds
@@ -40,13 +50,17 @@ public class SettingsController : ControllerBase
 
     [HttpPatch("tags")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public IActionResult UpdateTags([FromBody] UpdateTagsRequest req)
+    public async Task<IActionResult> UpdateTags([FromBody] UpdateTagsRequest req)
     {
         if (!string.IsNullOrWhiteSpace(req.PendingTag))
             Config.PendingTag = req.PendingTag;
         if (!string.IsNullOrWhiteSpace(req.DeniedTag))
             Config.DeniedTag = req.DeniedTag;
+        if (!string.IsNullOrWhiteSpace(req.AllowedTag))
+            Config.AllowedTag = req.AllowedTag;
         Plugin.Instance.SaveConfiguration();
+        await _parentalControlService.ApplyTagPreferencesForActiveProfilesAsync().ConfigureAwait(false);
+        await _syncService.ApplyTagsForAllDecisionRecordsAsync().ConfigureAwait(false);
         return NoContent();
     }
 
