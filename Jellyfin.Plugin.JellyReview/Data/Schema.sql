@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS viewer_profiles (
     jellyfin_user_id TEXT,
     age_hint INTEGER,
     active_rule_set_id TEXT,
+    pending_tag TEXT,
+    denied_tag TEXT,
+    allowed_tag TEXT,
     created_by_jellyfin_user_id TEXT NOT NULL,
     is_active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -83,6 +86,13 @@ CREATE TABLE IF NOT EXISTS review_rules (
     viewer_profile_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS review_rule_profiles (
+    rule_id TEXT NOT NULL REFERENCES review_rules(id) ON DELETE CASCADE,
+    viewer_profile_id TEXT NOT NULL REFERENCES viewer_profiles(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (rule_id, viewer_profile_id)
 );
 
 CREATE TABLE IF NOT EXISTS notification_channels (

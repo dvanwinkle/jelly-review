@@ -31,6 +31,12 @@ public class MediaItemDto
     public string Status { get; set; } = string.Empty;
     [JsonPropertyName("decision")]
     public ReviewDecisionDto? Decision { get; set; }
+    [JsonPropertyName("viewerDecision")]
+    public ViewerDecisionDto? ViewerDecision { get; set; }
+    [JsonPropertyName("viewerDecisions")]
+    public List<ViewerDecisionDto> ViewerDecisions { get; set; } = new();
+    [JsonPropertyName("aggregateState")]
+    public string? AggregateState { get; set; }
 }
 
 public class MediaListResponse

@@ -51,7 +51,13 @@ public class ActionTokenController : ControllerBase
         {
             await _reviewService.ApplyViewerActionAsync(
                 mediaRecordId, viewerProfileId, action, "system", null, null, null, "action_token");
-            decision = _reviewService.GetDecision(mediaRecordId);
+            var viewerDecision = _reviewService.GetViewerDecision(mediaRecordId, viewerProfileId);
+            decision = _reviewService.GetDecision(mediaRecordId) ?? new Models.ReviewDecision
+            {
+                MediaRecordId = mediaRecordId,
+                State = viewerDecision?.State ?? "pending",
+                Source = "action_token",
+            };
         }
         else
         {

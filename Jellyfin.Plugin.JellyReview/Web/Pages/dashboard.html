@@ -107,6 +107,7 @@
                         <div class="jr-count-badge" data-state="deferred"><div class="num" id="jr-count-deferred">—</div><div class="label">Deferred</div></div>
                     </div>
                     <div class="jr-toolbar">
+                        <select id="jr-profile-filter"><option value="all">All profiles</option></select>
                         <input type="search" id="jr-search" placeholder="Search title...">
                         <button type="button" class="jr-btn jr-btn-approve" id="jr-bulk-approve">Approve Selected</button>
                         <button type="button" class="jr-btn jr-btn-deny" id="jr-bulk-deny">Deny Selected</button>
@@ -119,6 +120,7 @@
                 <div id="jr-section-history" class="jr-section">
                     <div class="jr-section-header">Review History</div>
                     <div class="jr-toolbar">
+                        <select id="jr-history-profile-filter"><option value="all">All profiles</option></select>
                         <select id="jr-history-state">
                             <option value="">All</option>
                             <option value="approved">Approved</option>
@@ -149,6 +151,7 @@
                             <div><label>Name</label><input type="text" id="jr-rule-name" placeholder="Rule name"></div>
                             <div><label>Action</label><select id="jr-rule-action"><option value="auto_approve">Auto-approve</option><option value="auto_deny">Auto-deny</option><option value="send_to_review">Send to review</option><option value="defer">Defer</option></select></div>
                             <div><label>Priority</label><input type="number" id="jr-rule-priority" value="100"></div>
+                            <div><label>Profiles</label><select id="jr-rule-profiles" multiple size="3"></select></div>
                         </div>
                         <div style="margin-top:12px">
                             <label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:8px">Conditions <span style="color:#64748b">(all must match)</span></label>

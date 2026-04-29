@@ -294,11 +294,22 @@ public class NotificationService
     {
         using var conn = _db.CreateConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = @"
+        cmd.CommandText = !string.IsNullOrEmpty(viewerProfileId)
+            ? @"
             SELECT mr.id, mr.title, mr.year, mr.media_type, mr.official_rating, mr.overview, mr.genres_json,
-                   (SELECT COUNT(*) FROM review_decisions WHERE state='pending') as pending_count
+                   (SELECT COUNT(*) FROM viewer_decisions WHERE state='pending' AND viewer_profile_id = @vpid) as pending_count
+            FROM media_records mr WHERE mr.id = @id"
+            : @"
+            SELECT mr.id, mr.title, mr.year, mr.media_type, mr.official_rating, mr.overview, mr.genres_json,
+                   (SELECT CASE
+                       WHEN EXISTS (SELECT 1 FROM viewer_decisions)
+                       THEN (SELECT COUNT(*) FROM viewer_decisions WHERE state='pending')
+                       ELSE (SELECT COUNT(*) FROM review_decisions WHERE state='pending')
+                   END) as pending_count
             FROM media_records mr WHERE mr.id = @id";
         cmd.Parameters.AddWithValue("@id", mediaRecordId);
+        if (!string.IsNullOrEmpty(viewerProfileId))
+            cmd.Parameters.AddWithValue("@vpid", viewerProfileId);
         using var r = cmd.ExecuteReader();
         if (!r.Read()) return null;
 

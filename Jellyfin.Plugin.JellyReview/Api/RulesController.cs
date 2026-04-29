@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Jellyfin.Api.Constants;
 using Jellyfin.Plugin.JellyReview.Api.Dtos;
@@ -60,6 +61,7 @@ public class RulesController : ControllerBase
             cmd.Parameters.AddWithValue("@action", req.Action);
             cmd.Parameters.AddWithValue("@vpid", (object?)req.ViewerProfileId ?? DBNull.Value);
             cmd.ExecuteNonQuery();
+            SaveRuleProfiles(conn, id, req.ViewerProfileIds);
             await Task.CompletedTask;
         });
 
@@ -91,6 +93,8 @@ public class RulesController : ControllerBase
             cmd.Parameters.AddWithValue("@action", req.Action ?? existing.Action);
             cmd.Parameters.AddWithValue("@id", id);
             cmd.ExecuteNonQuery();
+            if (req.ViewerProfileIds != null)
+                SaveRuleProfiles(conn, id, req.ViewerProfileIds);
             await Task.CompletedTask;
         });
 
@@ -168,6 +172,11 @@ public class RulesController : ControllerBase
         var list = new List<ReviewRule>();
         while (r.Read())
             list.Add(ReadRule(r));
+        r.Close();
+
+        foreach (var rule in list)
+            rule.ViewerProfileIds = LoadRuleProfileIds(conn, rule.Id);
+
         return list;
     }
 
@@ -180,7 +189,48 @@ public class RulesController : ControllerBase
             FROM review_rules WHERE id = @id";
         cmd.Parameters.AddWithValue("@id", id);
         using var r = cmd.ExecuteReader();
-        return r.Read() ? ReadRule(r) : null;
+        if (!r.Read()) return null;
+        var rule = ReadRule(r);
+        r.Close();
+        rule.ViewerProfileIds = LoadRuleProfileIds(conn, rule.Id);
+        return rule;
+    }
+
+    private static void SaveRuleProfiles(Microsoft.Data.Sqlite.SqliteConnection conn, string ruleId, IEnumerable<string> profileIds)
+    {
+        using (var delete = conn.CreateCommand())
+        {
+            delete.CommandText = "DELETE FROM review_rule_profiles WHERE rule_id = @id";
+            delete.Parameters.AddWithValue("@id", ruleId);
+            delete.ExecuteNonQuery();
+        }
+
+        foreach (var profileId in profileIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct())
+        {
+            using var insert = conn.CreateCommand();
+            insert.CommandText = @"
+                INSERT OR IGNORE INTO review_rule_profiles (rule_id, viewer_profile_id)
+                VALUES (@rule, @profile)";
+            insert.Parameters.AddWithValue("@rule", ruleId);
+            insert.Parameters.AddWithValue("@profile", profileId);
+            insert.ExecuteNonQuery();
+        }
+    }
+
+    private static List<string> LoadRuleProfileIds(Microsoft.Data.Sqlite.SqliteConnection conn, string ruleId)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT viewer_profile_id
+            FROM review_rule_profiles
+            WHERE rule_id = @id
+            ORDER BY created_at";
+        cmd.Parameters.AddWithValue("@id", ruleId);
+        using var reader = cmd.ExecuteReader();
+        var ids = new List<string>();
+        while (reader.Read())
+            ids.Add(reader.GetString(0));
+        return ids;
     }
 
     private static ReviewRule ReadRule(Microsoft.Data.Sqlite.SqliteDataReader r) => new()
@@ -195,6 +245,8 @@ public class RulesController : ControllerBase
     {
         Id = r.Id, Name = r.Name, Enabled = r.Enabled, Priority = r.Priority,
         ConditionsJson = r.ConditionsJson, Action = r.Action,
-        ViewerProfileId = r.ViewerProfileId, CreatedAt = r.CreatedAt
+        ViewerProfileId = r.ViewerProfileId,
+        ViewerProfileIds = r.ViewerProfileIds,
+        CreatedAt = r.CreatedAt
     };
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -34,7 +35,9 @@ public class MediaController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<MediaListResponse> GetMedia(
         [FromQuery] string? state,
-        [FromQuery] string? search,
+        [FromQuery] string? viewerProfileId,
+        [FromQuery] bool allProfiles = false,
+        [FromQuery] string? search = null,
         [FromQuery] int offset = 0,
         [FromQuery] int limit = 50)
     {
@@ -42,7 +45,16 @@ public class MediaController : ControllerBase
         using var cmd = conn.CreateCommand();
 
         var where = "WHERE mr.status = 'active'";
-        if (!string.IsNullOrEmpty(state)) where += " AND rd.state = @state";
+        var joinViewer = "LEFT JOIN viewer_decisions vd ON vd.media_record_id = mr.id AND vd.viewer_profile_id = @vpid";
+        if (!string.IsNullOrEmpty(state))
+        {
+            if (!string.IsNullOrEmpty(viewerProfileId))
+                where += " AND vd.state = @state";
+            else if (allProfiles)
+                where += " AND EXISTS (SELECT 1 FROM viewer_decisions vd2 WHERE vd2.media_record_id = mr.id AND vd2.state = @state)";
+            else
+                where += " AND rd.state = @state";
+        }
         if (!string.IsNullOrEmpty(search)) where += " AND (mr.title LIKE @search OR mr.sort_title LIKE @search)";
 
         cmd.CommandText = $@"
@@ -50,14 +62,17 @@ public class MediaController : ControllerBase
                    mr.year, mr.official_rating, mr.community_rating, mr.runtime_minutes,
                    mr.overview, mr.genres_json, mr.status,
                    rd.id, rd.state, rd.decision_reason, rd.reviewed_at, rd.source, rd.notes,
+                   vd.id, vd.viewer_profile_id, vd.state, vd.decision_reason, vd.reviewed_at, vd.source, vd.notes,
                    COUNT(*) OVER() as total_count
             FROM media_records mr
             LEFT JOIN review_decisions rd ON rd.media_record_id = mr.id
+            {joinViewer}
             {where}
             ORDER BY mr.sort_title, mr.title
             LIMIT @limit OFFSET @offset";
 
         if (!string.IsNullOrEmpty(state)) cmd.Parameters.AddWithValue("@state", state);
+        cmd.Parameters.AddWithValue("@vpid", (object?)viewerProfileId ?? DBNull.Value);
         if (!string.IsNullOrEmpty(search)) cmd.Parameters.AddWithValue("@search", $"%{search}%");
         cmd.Parameters.AddWithValue("@limit", limit);
         cmd.Parameters.AddWithValue("@offset", offset);
@@ -68,7 +83,7 @@ public class MediaController : ControllerBase
         using var r = cmd.ExecuteReader();
         while (r.Read())
         {
-            total = r.GetInt32(18);
+            total = r.GetInt32(25);
             var genres = new List<string>();
             if (!r.IsDBNull(10))
             {
@@ -105,8 +120,31 @@ public class MediaController : ControllerBase
                     Notes = r.IsDBNull(17) ? null : r.GetString(17),
                 };
             }
-
+            if (!r.IsDBNull(18))
+            {
+                dto.ViewerDecision = new ViewerDecisionDto
+                {
+                    Id = r.GetString(18),
+                    ViewerProfileId = r.GetString(19),
+                    MediaRecordId = r.GetString(0),
+                    State = r.GetString(20),
+                    DecisionReason = r.IsDBNull(21) ? null : r.GetString(21),
+                    ReviewedAt = r.IsDBNull(22) ? null : r.GetString(22),
+                    Source = r.GetString(23),
+                    Notes = r.IsDBNull(24) ? null : r.GetString(24),
+                };
+            }
             items.Add(dto);
+        }
+        r.Close();
+
+        if (allProfiles)
+        {
+            foreach (var item in items)
+            {
+                item.ViewerDecisions = LoadViewerDecisions(conn, item.Id);
+                item.AggregateState = ComputeAggregateState(item.ViewerDecisions);
+            }
         }
 
         return Ok(new MediaListResponse { Items = items, Total = total, Offset = offset, Limit = limit });
@@ -114,16 +152,38 @@ public class MediaController : ControllerBase
 
     [HttpGet("counts")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<MediaCountsDto> GetCounts()
+    public ActionResult<MediaCountsDto> GetCounts([FromQuery] string? viewerProfileId, [FromQuery] bool allProfiles = false)
     {
         using var conn = _db.CreateConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = @"
-            SELECT rd.state, COUNT(*) as cnt
-            FROM media_records mr
-            INNER JOIN review_decisions rd ON rd.media_record_id = mr.id
-            WHERE mr.status = 'active'
-            GROUP BY rd.state";
+        if (!string.IsNullOrEmpty(viewerProfileId))
+        {
+            cmd.CommandText = @"
+                SELECT vd.state, COUNT(*) as cnt
+                FROM media_records mr
+                INNER JOIN viewer_decisions vd ON vd.media_record_id = mr.id
+                WHERE mr.status = 'active' AND vd.viewer_profile_id = @vpid
+                GROUP BY vd.state";
+            cmd.Parameters.AddWithValue("@vpid", viewerProfileId);
+        }
+        else if (allProfiles)
+        {
+            cmd.CommandText = @"
+                SELECT vd.state, COUNT(*) as cnt
+                FROM media_records mr
+                INNER JOIN viewer_decisions vd ON vd.media_record_id = mr.id
+                WHERE mr.status = 'active'
+                GROUP BY vd.state";
+        }
+        else
+        {
+            cmd.CommandText = @"
+                SELECT rd.state, COUNT(*) as cnt
+                FROM media_records mr
+                INNER JOIN review_decisions rd ON rd.media_record_id = mr.id
+                WHERE mr.status = 'active'
+                GROUP BY rd.state";
+        }
 
         var counts = new MediaCountsDto();
         using var r = cmd.ExecuteReader();
@@ -141,6 +201,42 @@ public class MediaController : ControllerBase
         }
         counts.Total = counts.Pending + counts.Approved + counts.Denied + counts.Deferred;
         return Ok(counts);
+    }
+
+    private static List<ViewerDecisionDto> LoadViewerDecisions(Microsoft.Data.Sqlite.SqliteConnection conn, string mediaRecordId)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT id, viewer_profile_id, state, decision_reason, reviewed_at, source, notes
+            FROM viewer_decisions
+            WHERE media_record_id = @id
+            ORDER BY viewer_profile_id";
+        cmd.Parameters.AddWithValue("@id", mediaRecordId);
+        using var reader = cmd.ExecuteReader();
+        var result = new List<ViewerDecisionDto>();
+        while (reader.Read())
+        {
+            result.Add(new ViewerDecisionDto
+            {
+                Id = reader.GetString(0),
+                ViewerProfileId = reader.GetString(1),
+                MediaRecordId = mediaRecordId,
+                State = reader.GetString(2),
+                DecisionReason = reader.IsDBNull(3) ? null : reader.GetString(3),
+                ReviewedAt = reader.IsDBNull(4) ? null : reader.GetString(4),
+                Source = reader.GetString(5),
+                Notes = reader.IsDBNull(6) ? null : reader.GetString(6),
+            });
+        }
+
+        return result;
+    }
+
+    private static string? ComputeAggregateState(IReadOnlyCollection<ViewerDecisionDto> decisions)
+    {
+        if (decisions.Count == 0) return null;
+        var distinct = decisions.Select(d => d.State).Distinct().ToList();
+        return distinct.Count == 1 ? distinct[0] : "mixed";
     }
 
     [HttpGet("{itemId}")]

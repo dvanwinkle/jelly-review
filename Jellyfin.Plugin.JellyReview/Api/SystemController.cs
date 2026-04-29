@@ -28,7 +28,12 @@ public class SystemController : ControllerBase
         cmd.CommandText = "SELECT COUNT(*) FROM media_records WHERE status='active'";
         var mediaCount = (long)(cmd.ExecuteScalar() ?? 0L);
 
-        cmd.CommandText = "SELECT COUNT(*) FROM review_decisions WHERE state='pending'";
+        cmd.CommandText = @"
+            SELECT CASE
+                WHEN EXISTS (SELECT 1 FROM viewer_decisions)
+                THEN (SELECT COUNT(*) FROM viewer_decisions WHERE state='pending')
+                ELSE (SELECT COUNT(*) FROM review_decisions WHERE state='pending')
+            END";
         var pendingCount = (long)(cmd.ExecuteScalar() ?? 0L);
 
         cmd.CommandText = "SELECT last_success_at FROM sync_cursors WHERE source='jellyfin_recent_items' LIMIT 1";

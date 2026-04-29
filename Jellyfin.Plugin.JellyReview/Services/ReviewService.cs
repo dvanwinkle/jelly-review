@@ -143,6 +143,28 @@ public class ReviewService
         });
     }
 
+    public async Task<List<ViewerDecision>> ApplyViewerActionToAllProfilesAsync(
+        string mediaRecordId,
+        string action,
+        string actorType = "user",
+        string? actorId = null,
+        string? notes = null,
+        string? reason = null,
+        string source = "manual_review")
+    {
+        var results = new List<ViewerDecision>();
+        foreach (var profileId in GetActiveViewerProfileIds())
+        {
+            var decision = await ApplyViewerActionAsync(
+                mediaRecordId, profileId, action, actorType, actorId, notes, reason, source)
+                .ConfigureAwait(false);
+            if (decision != null)
+                results.Add(decision);
+        }
+
+        return results;
+    }
+
     public List<DecisionHistory> GetHistory(string mediaRecordId, int limit = 50)
     {
         using var conn = _db.CreateConnection();
@@ -182,6 +204,35 @@ public class ReviewService
     {
         using var conn = _db.CreateConnection();
         return GetDecision(conn, mediaRecordId);
+    }
+
+    public ViewerDecision? GetViewerDecision(string mediaRecordId, string viewerProfileId)
+    {
+        using var conn = _db.CreateConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT id, viewer_profile_id, media_record_id, state, decision_reason,
+                   reviewer_jellyfin_user_id, reviewed_at, source, notes, needs_resync,
+                   created_at, updated_at
+            FROM viewer_decisions
+            WHERE media_record_id = @mid AND viewer_profile_id = @vpid";
+        cmd.Parameters.AddWithValue("@mid", mediaRecordId);
+        cmd.Parameters.AddWithValue("@vpid", viewerProfileId);
+        using var reader = cmd.ExecuteReader();
+        if (!reader.Read()) return null;
+        return ReadViewerDecision(reader);
+    }
+
+    public List<string> GetActiveViewerProfileIds()
+    {
+        using var conn = _db.CreateConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT id FROM viewer_profiles WHERE is_active = 1 ORDER BY created_at";
+        using var reader = cmd.ExecuteReader();
+        var result = new List<string>();
+        while (reader.Read())
+            result.Add(reader.GetString(0));
+        return result;
     }
 
     private static ReviewDecision? GetDecision(SqliteConnection conn, string mediaRecordId)
@@ -285,21 +336,7 @@ public class ReviewService
         using var reader = cmd.ExecuteReader();
         if (reader.Read())
         {
-            return new ViewerDecision
-            {
-                Id = reader.GetString(0),
-                ViewerProfileId = reader.GetString(1),
-                MediaRecordId = reader.GetString(2),
-                State = reader.GetString(3),
-                DecisionReason = reader.IsDBNull(4) ? null : reader.GetString(4),
-                ReviewerJellyfinUserId = reader.IsDBNull(5) ? null : reader.GetString(5),
-                ReviewedAt = reader.IsDBNull(6) ? null : reader.GetString(6),
-                Source = reader.GetString(7),
-                Notes = reader.IsDBNull(8) ? null : reader.GetString(8),
-                NeedsResync = reader.GetInt32(9) == 1,
-                CreatedAt = reader.GetString(10),
-                UpdatedAt = reader.GetString(11)
-            };
+            return ReadViewerDecision(reader);
         }
 
         return new ViewerDecision
@@ -313,6 +350,22 @@ public class ReviewService
             UpdatedAt = DateTime.UtcNow.ToString("O")
         };
     }
+
+    private static ViewerDecision ReadViewerDecision(SqliteDataReader reader) => new()
+    {
+        Id = reader.GetString(0),
+        ViewerProfileId = reader.GetString(1),
+        MediaRecordId = reader.GetString(2),
+        State = reader.GetString(3),
+        DecisionReason = reader.IsDBNull(4) ? null : reader.GetString(4),
+        ReviewerJellyfinUserId = reader.IsDBNull(5) ? null : reader.GetString(5),
+        ReviewedAt = reader.IsDBNull(6) ? null : reader.GetString(6),
+        Source = reader.GetString(7),
+        Notes = reader.IsDBNull(8) ? null : reader.GetString(8),
+        NeedsResync = reader.GetInt32(9) == 1,
+        CreatedAt = reader.GetString(10),
+        UpdatedAt = reader.GetString(11)
+    };
 
     private static void UpsertViewerDecision(SqliteConnection conn, ViewerDecision d)
     {

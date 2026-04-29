@@ -168,7 +168,11 @@ public class RuleEngine
             cmd.CommandText = @"
                 SELECT id, name, enabled, priority, conditions_json, action, viewer_profile_id
                 FROM review_rules
-                WHERE enabled = 1 AND viewer_profile_id IS NULL
+                WHERE enabled = 1
+                  AND viewer_profile_id IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM review_rule_profiles rrp WHERE rrp.rule_id = review_rules.id
+                  )
                 ORDER BY priority ASC";
         }
         else
@@ -176,7 +180,14 @@ public class RuleEngine
             cmd.CommandText = @"
                 SELECT id, name, enabled, priority, conditions_json, action, viewer_profile_id
                 FROM review_rules
-                WHERE enabled = 1 AND viewer_profile_id = @vpid
+                WHERE enabled = 1
+                  AND (
+                      viewer_profile_id = @vpid
+                      OR EXISTS (
+                          SELECT 1 FROM review_rule_profiles rrp
+                          WHERE rrp.rule_id = review_rules.id AND rrp.viewer_profile_id = @vpid
+                      )
+                  )
                 ORDER BY priority ASC";
             cmd.Parameters.AddWithValue("@vpid", viewerProfileId!);
         }

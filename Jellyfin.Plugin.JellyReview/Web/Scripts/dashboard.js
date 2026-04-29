@@ -65,7 +65,10 @@ function makeApi() {
             const q = new URLSearchParams(params || {}).toString();
             return request('GET', '/Media' + (q ? '?' + q : ''));
         },
-        getCounts: () => request('GET', '/Media/counts'),
+        getCounts: (params) => {
+            const q = new URLSearchParams(params || {}).toString();
+            return request('GET', '/Media/counts' + (q ? '?' + q : ''));
+        },
         sync: (full) => request('POST', `/Media/sync?full=${!!full}`),
         approve: (id, body) => request('POST', `/Reviews/${id}/approve`, body),
         deny: (id, body) => request('POST', `/Reviews/${id}/deny`, body),
@@ -98,6 +101,8 @@ function createController(view) {
     let currentOffset = 0;
     let eventsWired = false;
     let rb = null;
+    let viewerProfiles = [];
+    let selectedProfileId = 'all';
 
     const $ = (sel) => view.querySelector(sel);
     const $$ = (sel) => Array.from(view.querySelectorAll(sel));
@@ -139,9 +144,49 @@ function createController(view) {
         }
     }
 
+    function profileQueryParams() {
+        if (!viewerProfiles.length) return {};
+        if (selectedProfileId === 'all') return { allProfiles: true };
+        if (selectedProfileId) return { viewerProfileId: selectedProfileId };
+        return {};
+    }
+
+    function actionBody() {
+        if (!viewerProfiles.length) return undefined;
+        if (selectedProfileId === 'all') return { allProfiles: true };
+        if (selectedProfileId) return { viewerProfileId: selectedProfileId };
+        return undefined;
+    }
+
+    async function ensureViewerProfiles() {
+        if (viewerProfiles.length) return viewerProfiles;
+        viewerProfiles = await Api.getViewerProfiles();
+        renderProfileFilters();
+        return viewerProfiles;
+    }
+
+    function renderProfileFilters() {
+        const options = ['<option value="all">All profiles</option>']
+            .concat(viewerProfiles.map((p) => `<option value="${esc(p.id)}">${esc(p.displayName)}</option>`))
+            .join('');
+        ['#jr-profile-filter', '#jr-history-profile-filter'].forEach((selector) => {
+            const el = $(selector);
+            if (!el) return;
+            el.innerHTML = options;
+            el.value = selectedProfileId;
+        });
+        const ruleProfiles = $('#jr-rule-profiles');
+        if (ruleProfiles) {
+            ruleProfiles.innerHTML = viewerProfiles
+                .map((p) => `<option value="${esc(p.id)}">${esc(p.displayName)}</option>`)
+                .join('');
+        }
+    }
+
     async function loadCounts() {
         try {
-            const c = await Api.getCounts();
+            await ensureViewerProfiles();
+            const c = await Api.getCounts(profileQueryParams());
             $('#jr-count-pending').textContent = c.pending;
             $('#jr-count-approved').textContent = c.approved;
             $('#jr-count-denied').textContent = c.denied;
@@ -167,7 +212,7 @@ function createController(view) {
             return;
         }
         target.innerHTML = items.map((item) => {
-            const state = item.decision?.state ?? 'unknown';
+            const state = item.viewerDecision?.state ?? item.aggregateState ?? item.decision?.state ?? 'unknown';
             const year = item.year ?? '';
             const rating = item.officialRating ?? 'NR';
             const genres = (item.genres || []).slice(0, 2).join(', ');
@@ -201,6 +246,7 @@ function createController(view) {
         if (stateOverride !== undefined) currentState = stateOverride;
         const params = { limit: PAGE_SIZE, offset: currentOffset };
         if (currentState) params.state = currentState;
+        Object.assign(params, profileQueryParams());
         const search = currentSection === 'history' ? $('#jr-history-search')?.value : $('#jr-search')?.value;
         if (search) params.search = search;
 
@@ -241,7 +287,7 @@ function createController(view) {
 
     async function doAction(itemId, action) {
         try {
-            await Api[action](itemId);
+            await Api[action](itemId, actionBody());
             await loadCounts();
             await loadMediaList();
             const actionText = pastTenseAction(action);
@@ -255,7 +301,7 @@ function createController(view) {
         const checked = $$('.jr-check:checked').map((c) => c.dataset.id);
         if (!checked.length) { showError('No items selected'); return; }
         try {
-            const r = await Api.bulk({ itemIds: checked, action });
+            const r = await Api.bulk({ itemIds: checked, action, ...actionBody() });
             showToast(`${r.succeeded} item(s) ${pastTenseAction(action)}`);
             await loadCounts();
             await loadMediaList();
@@ -288,6 +334,8 @@ function createController(view) {
                 Api.getJellyfinUsers(),
                 Api.getViewerProfiles(),
             ]);
+            viewerProfiles = profiles;
+            renderProfileFilters();
 
             const profileByUserId = {};
             profiles.forEach((p) => { if (p.jellyfinUserId) profileByUserId[p.jellyfinUserId] = p; });
@@ -300,6 +348,7 @@ function createController(view) {
                         <strong>${esc(u.name)}</strong>
                         ${profile ? `<span class="jr-meta" style="margin-left:8px">Profile: ${esc(profile.displayName)}</span>` : ''}
                         ${profile?.ageHint ? `<span class="jr-meta" style="margin-left:8px">Age hint: ${profile.ageHint}</span>` : ''}
+                        ${profile ? `<div class="jr-meta" style="margin-top:4px">Tags: ${esc(profile.pendingTag)} · ${esc(profile.deniedTag)} · ${esc(profile.allowedTag)}</div>` : ''}
                     </div>
                     ${!profile ? `<button type="button" class="jr-btn jr-btn-approve" data-create-profile-id="${esc(u.id)}" data-create-profile-name="${esc(u.name)}">Add Profile</button>` : '<span class="jr-meta">✓ Profile active</span>'}
                 </div>`;
@@ -312,6 +361,7 @@ function createController(view) {
     async function createProfileForUser(jellyfinUserId, displayName) {
         try {
             await Api.createViewerProfile({ displayName, jellyfinUserId });
+            viewerProfiles = [];
             showToast(`Profile created for ${displayName}`);
             await loadViewerProfiles();
         } catch (e) {
@@ -381,6 +431,7 @@ function createController(view) {
         $('#jr-rule-name').value = '';
         $('#jr-rule-action').value = 'auto_approve';
         $('#jr-rule-priority').value = '100';
+        $$('#jr-rule-profiles option').forEach((o) => { o.selected = false; });
         $('#jr-conditions-list').innerHTML = '';
         $('#jr-rule-preview').style.display = 'none';
         $('#jr-rule-builder-title').textContent = 'Add Rule';
@@ -394,6 +445,8 @@ function createController(view) {
         $('#jr-rule-name').value = rule.name;
         $('#jr-rule-action').value = rule.action;
         $('#jr-rule-priority').value = rule.priority;
+        const profileIds = new Set(rule.viewerProfileIds || (rule.viewerProfileId ? [rule.viewerProfileId] : []));
+        $$('#jr-rule-profiles option').forEach((o) => { o.selected = profileIds.has(o.value); });
         $('#jr-conditions-list').innerHTML = '';
         $$('#jr-add-condition-type option').forEach((o) => { o.disabled = false; });
 
@@ -432,11 +485,14 @@ function createController(view) {
         try {
             await ensureRuleBuilder();
             const rules = await Api.getRules();
+            await ensureViewerProfiles();
+            const profileNameById = Object.fromEntries(viewerProfiles.map((p) => [p.id, p.displayName]));
             $('#jr-rules-list').innerHTML = rules.map((r) => `
                 <div class="jr-rule-row">
                     <span class="jr-rule-priority">${r.priority}</span>
                     <span class="jr-rule-name">${esc(r.name)}</span>
                     <span class="jr-rule-action jr-action-${r.action}">${r.action}</span>
+                    <span class="jr-meta">${(r.viewerProfileIds || []).length ? (r.viewerProfileIds || []).map((id) => esc(profileNameById[id] || id)).join(', ') : 'All profiles'}</span>
                     <span class="jr-rule-conditions">${rb.formatConditions(r.conditionsJson)}</span>
                     <button type="button" class="jr-btn jr-btn-secondary" data-rule-edit='${esc(JSON.stringify(r))}'>Edit</button>
                     <button type="button" class="jr-btn jr-btn-secondary" data-rule-toggle="${esc(r.id)}" data-rule-enabled="${!r.enabled}">${r.enabled ? 'Disable' : 'Enable'}</button>
@@ -458,13 +514,14 @@ function createController(view) {
         const conditionsJson = JSON.stringify(conditions);
         const action = $('#jr-rule-action').value;
         const priority = parseInt($('#jr-rule-priority').value, 10) || 100;
+        const viewerProfileIds = $$('#jr-rule-profiles option:checked').map((o) => o.value);
 
         try {
             if (editingRuleId) {
-                await Api.updateRule(editingRuleId, { name, action, priority, conditionsJson });
+                await Api.updateRule(editingRuleId, { name, action, priority, conditionsJson, viewerProfileIds });
                 showToast('Rule updated');
             } else {
-                await Api.createRule({ name, action, priority, conditionsJson, enabled: true });
+                await Api.createRule({ name, action, priority, conditionsJson, enabled: true, viewerProfileIds });
                 showToast('Rule created');
             }
             resetRuleBuilder();
@@ -607,6 +664,22 @@ function createController(view) {
 
         $('#jr-search')?.addEventListener('input', () => { currentOffset = 0; loadMediaList(); });
         $('#jr-history-search')?.addEventListener('input', () => { currentOffset = 0; loadMediaList(); });
+        $('#jr-profile-filter')?.addEventListener('change', () => {
+            selectedProfileId = $('#jr-profile-filter')?.value || 'all';
+            const historyFilter = $('#jr-history-profile-filter');
+            if (historyFilter) historyFilter.value = selectedProfileId;
+            currentOffset = 0;
+            loadCounts();
+            loadMediaList();
+        });
+        $('#jr-history-profile-filter')?.addEventListener('change', () => {
+            selectedProfileId = $('#jr-history-profile-filter')?.value || 'all';
+            const queueFilter = $('#jr-profile-filter');
+            if (queueFilter) queueFilter.value = selectedProfileId;
+            currentOffset = 0;
+            loadCounts();
+            loadMediaList();
+        });
         $('#jr-history-state')?.addEventListener('change', () => {
             currentOffset = 0;
             currentState = $('#jr-history-state')?.value || null;
@@ -682,6 +755,8 @@ function createController(view) {
         async refresh() {
             currentOffset = 0;
             currentState = 'pending';
+            viewerProfiles = [];
+            await ensureViewerProfiles();
             await loadStatus();
             await loadCounts();
             await showSection('pending');

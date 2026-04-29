@@ -11,6 +11,8 @@ public class ReviewActionRequest
     public string? Reason { get; set; }
     [JsonPropertyName("viewerProfileId")]
     public string? ViewerProfileId { get; set; }
+    [JsonPropertyName("allProfiles")]
+    public bool AllProfiles { get; set; }
 }
 
 public class BulkActionRequest
@@ -25,6 +27,8 @@ public class BulkActionRequest
     public string? Reason { get; set; }
     [JsonPropertyName("viewerProfileId")]
     public string? ViewerProfileId { get; set; }
+    [JsonPropertyName("allProfiles")]
+    public bool AllProfiles { get; set; }
 }
 
 public class ReviewDecisionDto
@@ -45,12 +49,38 @@ public class ReviewDecisionDto
     public string Source { get; set; } = string.Empty;
     [JsonPropertyName("notes")]
     public string? Notes { get; set; }
+    [JsonPropertyName("viewerProfileId")]
+    public string? ViewerProfileId { get; set; }
+}
+
+public class ViewerDecisionDto
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+    [JsonPropertyName("viewerProfileId")]
+    public string ViewerProfileId { get; set; } = string.Empty;
+    [JsonPropertyName("mediaRecordId")]
+    public string MediaRecordId { get; set; } = string.Empty;
+    [JsonPropertyName("state")]
+    public string State { get; set; } = string.Empty;
+    [JsonPropertyName("decisionReason")]
+    public string? DecisionReason { get; set; }
+    [JsonPropertyName("reviewerJellyfinUserId")]
+    public string? ReviewerJellyfinUserId { get; set; }
+    [JsonPropertyName("reviewedAt")]
+    public string? ReviewedAt { get; set; }
+    [JsonPropertyName("source")]
+    public string Source { get; set; } = string.Empty;
+    [JsonPropertyName("notes")]
+    public string? Notes { get; set; }
 }
 
 public class DecisionHistoryDto
 {
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
+    [JsonPropertyName("viewerProfileId")]
+    public string? ViewerProfileId { get; set; }
     [JsonPropertyName("previousState")]
     public string? PreviousState { get; set; }
     [JsonPropertyName("newState")]
@@ -75,6 +105,12 @@ public class CreateViewerProfileRequest
     public string? JellyfinUserId { get; set; }
     [JsonPropertyName("ageHint")]
     public int? AgeHint { get; set; }
+    [JsonPropertyName("pendingTag")]
+    public string? PendingTag { get; set; }
+    [JsonPropertyName("deniedTag")]
+    public string? DeniedTag { get; set; }
+    [JsonPropertyName("allowedTag")]
+    public string? AllowedTag { get; set; }
 }
 
 public class JellyfinUserDto
@@ -97,6 +133,12 @@ public class ViewerProfileDto
     public string? JellyfinUserId { get; set; }
     [JsonPropertyName("ageHint")]
     public int? AgeHint { get; set; }
+    [JsonPropertyName("pendingTag")]
+    public string? PendingTag { get; set; }
+    [JsonPropertyName("deniedTag")]
+    public string? DeniedTag { get; set; }
+    [JsonPropertyName("allowedTag")]
+    public string? AllowedTag { get; set; }
     [JsonPropertyName("isActive")]
     public bool IsActive { get; set; }
     [JsonPropertyName("createdAt")]

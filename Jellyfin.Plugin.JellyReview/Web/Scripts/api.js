@@ -29,7 +29,10 @@ export const Api = (() => {
             const q = new URLSearchParams(params || {}).toString();
             return request('GET', '/Media' + (q ? '?' + q : ''));
         },
-        getCounts: () => request('GET', '/Media/counts'),
+        getCounts: (params) => {
+            const q = new URLSearchParams(params || {}).toString();
+            return request('GET', '/Media/counts' + (q ? '?' + q : ''));
+        },
         sync: (full) => request('POST', `/Media/sync?full=${!!full}`),
         approve: (id, body) => request('POST', `/Reviews/${id}/approve`, body),
         deny: (id, body) => request('POST', `/Reviews/${id}/deny`, body),

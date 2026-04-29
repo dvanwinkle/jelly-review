@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace Jellyfin.Plugin.JellyReview.Api.Dtos;
@@ -18,6 +19,8 @@ public class ReviewRuleDto
     public string Action { get; set; } = string.Empty;
     [JsonPropertyName("viewerProfileId")]
     public string? ViewerProfileId { get; set; }
+    [JsonPropertyName("viewerProfileIds")]
+    public List<string> ViewerProfileIds { get; set; } = new();
     [JsonPropertyName("createdAt")]
     public string CreatedAt { get; set; } = string.Empty;
 }
@@ -36,6 +39,8 @@ public class CreateRuleRequest
     public string Action { get; set; } = string.Empty;
     [JsonPropertyName("viewerProfileId")]
     public string? ViewerProfileId { get; set; }
+    [JsonPropertyName("viewerProfileIds")]
+    public List<string> ViewerProfileIds { get; set; } = new();
 }
 
 public class UpdateRuleRequest
@@ -50,6 +55,8 @@ public class UpdateRuleRequest
     public string? ConditionsJson { get; set; }
     [JsonPropertyName("action")]
     public string? Action { get; set; }
+    [JsonPropertyName("viewerProfileIds")]
+    public List<string>? ViewerProfileIds { get; set; }
 }
 
 public class EvaluateRuleRequest

@@ -125,6 +125,9 @@ public class DatabaseManager
         EnsureColumns(conn, "viewer_profiles", new Dictionary<string, string>
         {
             ["active_rule_set_id"] = "TEXT",
+            ["pending_tag"] = "TEXT",
+            ["denied_tag"] = "TEXT",
+            ["allowed_tag"] = "TEXT",
             ["is_active"] = "INTEGER NOT NULL DEFAULT 1",
             ["updated_at"] = "TEXT",
         });
@@ -169,6 +172,7 @@ public class DatabaseManager
 
         BackfillColumn(conn, "viewer_profiles", "is_active", "1");
         BackfillColumn(conn, "viewer_profiles", "updated_at", "datetime('now')");
+        BackfillProfileTags(conn);
 
         BackfillColumn(conn, "viewer_decisions", "source", "'manual_review'");
         BackfillColumn(conn, "viewer_decisions", "needs_resync", "0");
@@ -176,9 +180,66 @@ public class DatabaseManager
         BackfillColumn(conn, "viewer_decisions", "updated_at", "datetime('now')");
 
         BackfillColumn(conn, "review_rules", "updated_at", "datetime('now')");
+        EnsureRuleProfilesTable(conn);
+        BackfillRuleProfiles(conn);
+        BackfillViewerDecisions(conn);
 
         BackfillColumn(conn, "notification_channels", "notify_on_digest", "0");
         BackfillColumn(conn, "notification_channels", "updated_at", "datetime('now')");
+    }
+
+    private static void EnsureRuleProfilesTable(SqliteConnection conn)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            CREATE TABLE IF NOT EXISTS review_rule_profiles (
+                rule_id TEXT NOT NULL REFERENCES review_rules(id) ON DELETE CASCADE,
+                viewer_profile_id TEXT NOT NULL REFERENCES viewer_profiles(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (rule_id, viewer_profile_id)
+            )";
+        cmd.ExecuteNonQuery();
+    }
+
+    private static void BackfillProfileTags(SqliteConnection conn)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            UPDATE viewer_profiles
+            SET pending_tag = COALESCE(NULLIF(pending_tag, ''), 'jelly-review-' || substr(replace(id, '-', ''), 1, 12) || '-pending'),
+                denied_tag = COALESCE(NULLIF(denied_tag, ''), 'jelly-review-' || substr(replace(id, '-', ''), 1, 12) || '-denied'),
+                allowed_tag = COALESCE(NULLIF(allowed_tag, ''), 'jelly-review-' || substr(replace(id, '-', ''), 1, 12) || '-allow')
+            WHERE pending_tag IS NULL OR pending_tag = ''
+               OR denied_tag IS NULL OR denied_tag = ''
+               OR allowed_tag IS NULL OR allowed_tag = ''";
+        cmd.ExecuteNonQuery();
+    }
+
+    private static void BackfillRuleProfiles(SqliteConnection conn)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            INSERT OR IGNORE INTO review_rule_profiles (rule_id, viewer_profile_id)
+            SELECT id, viewer_profile_id
+            FROM review_rules
+            WHERE viewer_profile_id IS NOT NULL AND viewer_profile_id <> ''";
+        cmd.ExecuteNonQuery();
+    }
+
+    private static void BackfillViewerDecisions(SqliteConnection conn)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            INSERT OR IGNORE INTO viewer_decisions
+                (id, viewer_profile_id, media_record_id, state, decision_reason,
+                 reviewer_jellyfin_user_id, reviewed_at, source, notes, needs_resync,
+                 created_at, updated_at)
+            SELECT lower(hex(randomblob(16))), vp.id, rd.media_record_id, rd.state,
+                   rd.decision_reason, rd.reviewer_jellyfin_user_id, rd.reviewed_at,
+                   'migration', rd.notes, rd.needs_resync, datetime('now'), datetime('now')
+            FROM review_decisions rd
+            JOIN viewer_profiles vp ON vp.is_active = 1";
+        cmd.ExecuteNonQuery();
     }
 
     private void EnsureColumns(SqliteConnection conn, string table, IReadOnlyDictionary<string, string> requiredColumns)

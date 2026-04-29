@@ -56,6 +56,14 @@ public class SyncService
 
         using var conn = _db.CreateConnection();
         var existingDecision = GetDecision(conn, record.Id);
+        var profiles = LoadActiveProfiles(conn);
+
+        if (profiles.Count > 0)
+        {
+            await EnsureViewerDecisionsAsync(item, record, profiles, existingDecision).ConfigureAwait(false);
+            await ApplyTagsForItemAsync(record.Id).ConfigureAwait(false);
+            return;
+        }
 
         if (existingDecision != null)
         {
@@ -110,6 +118,82 @@ public class SyncService
             await _notifications.NotifyPendingReviewAsync(record.Id).ConfigureAwait(false);
     }
 
+    private async Task EnsureViewerDecisionsAsync(
+        BaseItem item,
+        MediaRecord record,
+        IReadOnlyCollection<ViewerProfile> profiles,
+        ReviewDecision? legacyDecision)
+    {
+        foreach (var profile in profiles)
+        {
+            var existing = GetViewerDecision(record.Id, profile.Id);
+            if (existing != null)
+            {
+                await ReapplyViewerRulesIfEligibleAsync(record, existing).ConfigureAwait(false);
+                continue;
+            }
+
+            var (state, source) = await DetermineInitialViewerStateAsync(item, record, profile.Id, legacyDecision)
+                .ConfigureAwait(false);
+
+            await _db.ExecuteWriteAsync(async writeConn =>
+            {
+                InsertViewerDecision(writeConn, record.Id, profile.Id, state, source);
+                InsertHistory(writeConn, record.Id, null, state, "sync_import", "system", profile.Id);
+                await Task.CompletedTask;
+            }).ConfigureAwait(false);
+
+            if (state == "pending")
+                await _notifications.NotifyPendingReviewAsync(record.Id, profile.Id).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<(string State, string Source)> DetermineInitialViewerStateAsync(
+        BaseItem item,
+        MediaRecord record,
+        string viewerProfileId,
+        ReviewDecision? legacyDecision)
+    {
+        var tags = item.Tags ?? Array.Empty<string>();
+        if (legacyDecision != null)
+            return (legacyDecision.State, "migration");
+
+        if (tags.Contains(Config.DeniedTag))
+            return ("denied", "sync_reconciliation");
+        if (tags.Contains(Config.PendingTag))
+            return ("pending", "sync_reconciliation");
+        if (tags.Contains(Config.AllowedTag))
+            return ("approved", "sync_reconciliation");
+
+        if (!Config.AutoRulesEnabled)
+            return ("pending", "sync_reconciliation");
+
+        await _ruleEngine.SeedStarterRulesAsync().ConfigureAwait(false);
+        var (action, _) = await _ruleEngine.EvaluateAsync(record, viewerProfileId).ConfigureAwait(false);
+        return (RuleActionToState(action), "auto_rule");
+    }
+
+    private async Task ReapplyViewerRulesIfEligibleAsync(MediaRecord record, ViewerDecision existingDecision)
+    {
+        if (!Config.AutoRulesEnabled) return;
+        if (!AutoReapplySources.Contains(existingDecision.Source)) return;
+
+        await _ruleEngine.SeedStarterRulesAsync().ConfigureAwait(false);
+        var (action, _) = await _ruleEngine.EvaluateAsync(record, existingDecision.ViewerProfileId).ConfigureAwait(false);
+        var newState = RuleActionToState(action);
+        if (newState == existingDecision.State) return;
+
+        await _db.ExecuteWriteAsync(async writeConn =>
+        {
+            UpdateViewerDecision(writeConn, existingDecision.Id, newState, "auto_rule");
+            InsertHistory(writeConn, record.Id, existingDecision.State, newState, "sync_reapply_rules", "system", existingDecision.ViewerProfileId);
+            await Task.CompletedTask;
+        }).ConfigureAwait(false);
+
+        if (newState == "pending")
+            await _notifications.NotifyPendingReviewAsync(record.Id, existingDecision.ViewerProfileId).ConfigureAwait(false);
+    }
+
     private async Task ReapplyRulesIfEligibleAsync(BaseItem item, MediaRecord record, ReviewDecision existingDecision)
     {
         if (!Config.AutoRulesEnabled) return;
@@ -158,6 +242,13 @@ public class SyncService
         }
 
         if (string.IsNullOrEmpty(jellyfinItemId)) return;
+        var profileStates = LoadViewerProfileTagStates(mediaRecordId);
+        if (profileStates.Count > 0)
+        {
+            if (Guid.TryParse(jellyfinItemId, out var viewerItemGuid))
+                await _tagManager.ApplyViewerDecisionTagsAsync(viewerItemGuid, profileStates).ConfigureAwait(false);
+            return;
+        }
 
         string? state;
         using (var conn = _db.CreateConnection())
@@ -179,7 +270,10 @@ public class SyncService
         using (var conn = _db.CreateConnection())
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT DISTINCT media_record_id FROM review_decisions";
+            cmd.CommandText = @"
+                SELECT DISTINCT media_record_id FROM viewer_decisions
+                UNION
+                SELECT DISTINCT media_record_id FROM review_decisions";
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
                 mediaRecordIds.Add(reader.GetString(0));
@@ -219,7 +313,13 @@ public class SyncService
                     {
                         using var conn = _db.CreateConnection();
                         var existingDecision = GetDecision(conn, record.Id);
-                        if (existingDecision != null)
+                        var profiles = LoadActiveProfiles(conn);
+                        if (profiles.Count > 0)
+                        {
+                            await EnsureViewerDecisionsAsync(item, record, profiles, existingDecision).ConfigureAwait(false);
+                            await ApplyTagsForItemAsync(record.Id).ConfigureAwait(false);
+                        }
+                        else if (existingDecision != null)
                             await ReapplyRulesIfEligibleAsync(item, record, existingDecision).ConfigureAwait(false);
                     }
                 }
@@ -496,19 +596,51 @@ public class SyncService
 
     private static void InsertHistory(
         SqliteConnection conn, string mediaRecordId, string? previous, string newState,
-        string action, string actorType)
+        string action, string actorType, string? viewerProfileId = null)
     {
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             INSERT INTO decision_history
-                (id, media_record_id, previous_state, new_state, action, actor_type, created_at)
-            VALUES (@id, @mid, @prev, @new, @action, @actor, datetime('now'))";
+                (id, media_record_id, viewer_profile_id, previous_state, new_state, action, actor_type, created_at)
+            VALUES (@id, @mid, @vpid, @prev, @new, @action, @actor, datetime('now'))";
         cmd.Parameters.AddWithValue("@id", Guid.NewGuid().ToString());
         cmd.Parameters.AddWithValue("@mid", mediaRecordId);
+        cmd.Parameters.AddWithValue("@vpid", (object?)viewerProfileId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@prev", (object?)previous ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@new", newState);
         cmd.Parameters.AddWithValue("@action", action);
         cmd.Parameters.AddWithValue("@actor", actorType);
+        cmd.ExecuteNonQuery();
+    }
+
+    private static void InsertViewerDecision(
+        SqliteConnection conn, string mediaRecordId, string viewerProfileId, string state, string source)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            INSERT OR IGNORE INTO viewer_decisions
+                (id, viewer_profile_id, media_record_id, state, source, created_at, updated_at)
+            VALUES (@id, @vpid, @mid, @state, @source, datetime('now'), datetime('now'))";
+        cmd.Parameters.AddWithValue("@id", Guid.NewGuid().ToString());
+        cmd.Parameters.AddWithValue("@vpid", viewerProfileId);
+        cmd.Parameters.AddWithValue("@mid", mediaRecordId);
+        cmd.Parameters.AddWithValue("@state", state);
+        cmd.Parameters.AddWithValue("@source", source);
+        cmd.ExecuteNonQuery();
+    }
+
+    private static void UpdateViewerDecision(SqliteConnection conn, string decisionId, string state, string source)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            UPDATE viewer_decisions
+            SET state = @state,
+                source = @source,
+                updated_at = datetime('now')
+            WHERE id = @id";
+        cmd.Parameters.AddWithValue("@id", decisionId);
+        cmd.Parameters.AddWithValue("@state", state);
+        cmd.Parameters.AddWithValue("@source", source);
         cmd.ExecuteNonQuery();
     }
 
@@ -542,6 +674,90 @@ public class SyncService
             State = reader.GetString(1),
             Source = reader.GetString(2),
         };
+    }
+
+    private ViewerDecision? GetViewerDecision(string mediaRecordId, string viewerProfileId)
+    {
+        using var conn = _db.CreateConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT id, viewer_profile_id, media_record_id, state, source
+            FROM viewer_decisions
+            WHERE media_record_id = @mid AND viewer_profile_id = @vpid
+            LIMIT 1";
+        cmd.Parameters.AddWithValue("@mid", mediaRecordId);
+        cmd.Parameters.AddWithValue("@vpid", viewerProfileId);
+        using var reader = cmd.ExecuteReader();
+        if (!reader.Read()) return null;
+
+        return new ViewerDecision
+        {
+            Id = reader.GetString(0),
+            ViewerProfileId = reader.GetString(1),
+            MediaRecordId = reader.GetString(2),
+            State = reader.GetString(3),
+            Source = reader.GetString(4),
+        };
+    }
+
+    private static List<ViewerProfile> LoadActiveProfiles(SqliteConnection conn)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT id, display_name, jellyfin_user_id, age_hint, pending_tag, denied_tag, allowed_tag
+            FROM viewer_profiles
+            WHERE is_active = 1
+            ORDER BY created_at";
+        using var reader = cmd.ExecuteReader();
+        var profiles = new List<ViewerProfile>();
+        while (reader.Read())
+        {
+            profiles.Add(new ViewerProfile
+            {
+                Id = reader.GetString(0),
+                DisplayName = reader.GetString(1),
+                JellyfinUserId = reader.IsDBNull(2) ? null : reader.GetString(2),
+                AgeHint = reader.IsDBNull(3) ? null : reader.GetInt32(3),
+                PendingTag = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
+                DeniedTag = reader.IsDBNull(5) ? string.Empty : reader.GetString(5),
+                AllowedTag = reader.IsDBNull(6) ? string.Empty : reader.GetString(6),
+            });
+        }
+
+        return profiles;
+    }
+
+    private List<ViewerProfileTagState> LoadViewerProfileTagStates(string mediaRecordId)
+    {
+        using var conn = _db.CreateConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT vp.id,
+                   COALESCE(vd.state, 'pending') as state,
+                   vp.pending_tag,
+                   vp.denied_tag,
+                   vp.allowed_tag
+            FROM viewer_profiles vp
+            LEFT JOIN viewer_decisions vd
+              ON vd.viewer_profile_id = vp.id AND vd.media_record_id = @mid
+            WHERE vp.is_active = 1
+            ORDER BY vp.created_at";
+        cmd.Parameters.AddWithValue("@mid", mediaRecordId);
+        using var reader = cmd.ExecuteReader();
+        var states = new List<ViewerProfileTagState>();
+        while (reader.Read())
+        {
+            states.Add(new ViewerProfileTagState
+            {
+                ViewerProfileId = reader.GetString(0),
+                State = reader.GetString(1),
+                PendingTag = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                DeniedTag = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
+                AllowedTag = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
+            });
+        }
+
+        return states;
     }
 
     private static IEnumerable<BaseItem> GetParentChain(BaseItem item)

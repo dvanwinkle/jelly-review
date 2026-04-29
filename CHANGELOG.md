@@ -9,12 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add missing Jellyfin plugin template scaffolding, including `jellyfin.ruleset`, Renovate configuration, VS Code workspace tasks, and reusable Jellyfin workflow files.
+- Add missing Jellyfin plugin template scaffolding, including `jellyfin.ruleset`, Renovate configuration, VS Code workspace tasks, and CI workflow files.
 - Add an approved-item allow tag and configure viewer profiles with Jellyfin's allowed-tags parental control.
 
 ### Changed
 
 - Disable the Jellyfin upstream publish workflow until deploy secrets are configured.
+- Remove the reusable Jellyfin changelog workflow in favor of the existing explicit `CHANGELOG.md` and tag release flow.
 
 ### Fixed
 

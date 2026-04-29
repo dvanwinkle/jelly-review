@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.JellyReview.Configuration;
+using Jellyfin.Plugin.JellyReview.Models;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Library;
@@ -144,6 +145,68 @@ public class TagManager
         catch (Exception ex)
         {
             _logger.LogError(ex, "JellyReview: failed to apply decision tags to {ItemId}", itemId);
+        }
+        finally
+        {
+            await _tagLock.WaitAsync().ConfigureAwait(false);
+            _tagWriteInFlight.Remove(itemId);
+            _tagLock.Release();
+        }
+    }
+
+    public async Task ApplyViewerDecisionTagsAsync(Guid itemId, IReadOnlyCollection<ViewerProfileTagState> profileStates)
+    {
+        await _tagLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_tagWriteInFlight.Contains(itemId)) return;
+            _tagWriteInFlight.Add(itemId);
+        }
+        finally
+        {
+            _tagLock.Release();
+        }
+
+        try
+        {
+            var item = _libraryManager.GetItemById(itemId);
+            if (item == null) return;
+
+            var tags = item.Tags?.ToList() ?? new List<string>();
+            var allProfileTags = profileStates
+                .SelectMany(p => new[] { p.PendingTag, p.DeniedTag, p.AllowedTag })
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .ToHashSet(StringComparer.Ordinal);
+
+            tags.RemoveAll(t => allProfileTags.Contains(t));
+            tags.Remove(Config.PendingTag);
+            tags.Remove(Config.DeniedTag);
+            tags.Remove(Config.AllowedTag);
+
+            foreach (var profile in profileStates)
+            {
+                var tag = profile.State switch
+                {
+                    "approved" => profile.AllowedTag,
+                    "denied" => profile.DeniedTag,
+                    "pending" or "deferred" => profile.PendingTag,
+                    _ => profile.PendingTag,
+                };
+
+                if (!string.IsNullOrWhiteSpace(tag) && !tags.Contains(tag))
+                    tags.Add(tag);
+            }
+
+            item.Tags = tags.ToArray();
+            await _libraryManager.UpdateItemAsync(
+                item, item.GetParent(), ItemUpdateType.MetadataEdit, CancellationToken.None)
+                .ConfigureAwait(false);
+
+            _logger.LogDebug("JellyReview: applied viewer decision tags to {ItemId}", itemId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "JellyReview: failed to apply viewer decision tags to {ItemId}", itemId);
         }
         finally
         {

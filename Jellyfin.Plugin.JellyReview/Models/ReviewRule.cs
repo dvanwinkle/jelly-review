@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Jellyfin.Plugin.JellyReview.Models;
 
 public class ReviewRule
@@ -9,6 +11,7 @@ public class ReviewRule
     public string ConditionsJson { get; set; } = "{}";
     public string Action { get; set; } = string.Empty;
     public string? ViewerProfileId { get; set; }
+    public List<string> ViewerProfileIds { get; set; } = new();
     public string CreatedAt { get; set; } = string.Empty;
     public string UpdatedAt { get; set; } = string.Empty;
 }

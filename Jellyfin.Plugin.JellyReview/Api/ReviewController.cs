@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Jellyfin.Api.Constants;
 using Jellyfin.Plugin.JellyReview.Api.Dtos;
@@ -48,9 +49,7 @@ public class ReviewController : ControllerBase
         if (mediaRecordId == null) return NotFound();
 
         var actorId = User.FindFirst("sub")?.Value ?? User.FindFirst("id")?.Value;
-        var decision = await _reviewService.ApplyActionAsync(
-            mediaRecordId, "approve", "user", actorId,
-            req?.Notes, req?.Reason);
+        var decision = await ApplyReviewActionAsync(mediaRecordId, "approve", req, actorId);
         if (decision == null) return NotFound();
 
         await _syncService.ApplyTagsForItemAsync(mediaRecordId);
@@ -66,9 +65,7 @@ public class ReviewController : ControllerBase
         if (mediaRecordId == null) return NotFound();
 
         var actorId = User.FindFirst("sub")?.Value ?? User.FindFirst("id")?.Value;
-        var decision = await _reviewService.ApplyActionAsync(
-            mediaRecordId, "deny", "user", actorId,
-            req?.Notes, req?.Reason);
+        var decision = await ApplyReviewActionAsync(mediaRecordId, "deny", req, actorId);
         if (decision == null) return NotFound();
 
         await _syncService.ApplyTagsForItemAsync(mediaRecordId);
@@ -83,9 +80,7 @@ public class ReviewController : ControllerBase
         if (mediaRecordId == null) return NotFound();
 
         var actorId = User.FindFirst("sub")?.Value ?? User.FindFirst("id")?.Value;
-        var decision = await _reviewService.ApplyActionAsync(
-            mediaRecordId, "defer", "user", actorId,
-            req?.Notes, req?.Reason);
+        var decision = await ApplyReviewActionAsync(mediaRecordId, "defer", req, actorId);
         if (decision == null) return NotFound();
 
         await _syncService.ApplyTagsForItemAsync(mediaRecordId);
@@ -100,9 +95,7 @@ public class ReviewController : ControllerBase
         if (mediaRecordId == null) return NotFound();
 
         var actorId = User.FindFirst("sub")?.Value ?? User.FindFirst("id")?.Value;
-        var decision = await _reviewService.ApplyActionAsync(
-            mediaRecordId, "reopen", "user", actorId,
-            req?.Notes, req?.Reason);
+        var decision = await ApplyReviewActionAsync(mediaRecordId, "reopen", req, actorId);
         if (decision == null) return NotFound();
 
         await _syncService.ApplyTagsForItemAsync(mediaRecordId);
@@ -125,9 +118,7 @@ public class ReviewController : ControllerBase
             var mediaRecordId = ResolveMediaRecordId(itemId);
             if (mediaRecordId == null) { failed++; continue; }
 
-            var decision = await _reviewService.ApplyActionAsync(
-                mediaRecordId, req.Action, "user", actorId,
-                req.Notes, req.Reason);
+            var decision = await ApplyReviewActionAsync(mediaRecordId, req.Action, req, actorId);
 
             if (decision != null)
             {
@@ -151,6 +142,7 @@ public class ReviewController : ControllerBase
         return Ok(history.Select(h => new DecisionHistoryDto
         {
             Id = h.Id,
+            ViewerProfileId = h.ViewerProfileId,
             PreviousState = h.PreviousState,
             NewState = h.NewState,
             Action = h.Action,
@@ -175,18 +167,27 @@ public class ReviewController : ControllerBase
     {
         var actorId = User.FindFirst("sub")?.Value ?? User.FindFirst("id")?.Value ?? string.Empty;
         var id = Guid.NewGuid().ToString();
+        var tagStem = CreateTagStem(req.DisplayName, req.JellyfinUserId, id);
+        var pendingTag = string.IsNullOrWhiteSpace(req.PendingTag) ? $"{tagStem}-pending" : req.PendingTag.Trim();
+        var deniedTag = string.IsNullOrWhiteSpace(req.DeniedTag) ? $"{tagStem}-denied" : req.DeniedTag.Trim();
+        var allowedTag = string.IsNullOrWhiteSpace(req.AllowedTag) ? $"{tagStem}-allow" : req.AllowedTag.Trim();
 
         await _db.ExecuteWriteAsync(async conn =>
         {
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
                 INSERT INTO viewer_profiles
-                    (id, display_name, jellyfin_user_id, age_hint, created_by_jellyfin_user_id, created_at, updated_at)
-                VALUES (@id, @name, @juid, @age, @creator, datetime('now'), datetime('now'))";
+                    (id, display_name, jellyfin_user_id, age_hint, pending_tag, denied_tag, allowed_tag,
+                     created_by_jellyfin_user_id, created_at, updated_at)
+                VALUES (@id, @name, @juid, @age, @pending, @denied, @allowed,
+                        @creator, datetime('now'), datetime('now'))";
             cmd.Parameters.AddWithValue("@id", id);
             cmd.Parameters.AddWithValue("@name", req.DisplayName);
             cmd.Parameters.AddWithValue("@juid", (object?)req.JellyfinUserId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@age", (object?)req.AgeHint ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@pending", pendingTag);
+            cmd.Parameters.AddWithValue("@denied", deniedTag);
+            cmd.Parameters.AddWithValue("@allowed", allowedTag);
             cmd.Parameters.AddWithValue("@creator", actorId);
             cmd.ExecuteNonQuery();
             await Task.CompletedTask;
@@ -235,12 +236,73 @@ public class ReviewController : ControllerBase
         return cmd.ExecuteScalar()?.ToString();
     }
 
+    private async Task<Models.ReviewDecision?> ApplyReviewActionAsync(
+        string mediaRecordId,
+        string action,
+        ReviewActionRequest? req,
+        string? actorId)
+    {
+        if (!string.IsNullOrEmpty(req?.ViewerProfileId))
+        {
+            await _reviewService.ApplyViewerActionAsync(
+                mediaRecordId, req.ViewerProfileId, action, "user", actorId, req.Notes, req.Reason)
+                .ConfigureAwait(false);
+            return _reviewService.GetDecision(mediaRecordId) ?? new Models.ReviewDecision
+            {
+                MediaRecordId = mediaRecordId,
+                State = _reviewService.GetViewerDecision(mediaRecordId, req.ViewerProfileId)?.State ?? "pending",
+                Source = "manual_review",
+            };
+        }
+
+        if (req?.AllProfiles == true)
+        {
+            await _reviewService.ApplyViewerActionToAllProfilesAsync(
+                mediaRecordId, action, "user", actorId, req.Notes, req.Reason)
+                .ConfigureAwait(false);
+            return _reviewService.GetDecision(mediaRecordId) ?? new Models.ReviewDecision
+            {
+                MediaRecordId = mediaRecordId,
+                State = "mixed",
+                Source = "manual_review",
+            };
+        }
+
+        return await _reviewService.ApplyActionAsync(
+            mediaRecordId, action, "user", actorId, req?.Notes, req?.Reason)
+            .ConfigureAwait(false);
+    }
+
+    private static string CreateTagStem(string displayName, string? jellyfinUserId, string profileId)
+    {
+        var source = string.IsNullOrWhiteSpace(displayName) ? jellyfinUserId ?? profileId : displayName;
+        var slug = Regex.Replace(source.ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
+        if (string.IsNullOrWhiteSpace(slug))
+            slug = profileId.Replace("-", string.Empty)[..12];
+        return $"jelly-review-{slug}";
+    }
+
+    private async Task<Models.ReviewDecision?> ApplyReviewActionAsync(
+        string mediaRecordId,
+        string action,
+        BulkActionRequest req,
+        string? actorId)
+    {
+        return await ApplyReviewActionAsync(mediaRecordId, action, new ReviewActionRequest
+        {
+            Notes = req.Notes,
+            Reason = req.Reason,
+            ViewerProfileId = req.ViewerProfileId,
+            AllProfiles = req.AllProfiles,
+        }, actorId).ConfigureAwait(false);
+    }
+
     private List<Models.ViewerProfile> LoadViewerProfiles()
     {
         using var conn = _db.CreateConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            SELECT id, display_name, jellyfin_user_id, age_hint, is_active, created_at
+            SELECT id, display_name, jellyfin_user_id, age_hint, pending_tag, denied_tag, allowed_tag, is_active, created_at
             FROM viewer_profiles WHERE is_active = 1 ORDER BY created_at";
         using var r = cmd.ExecuteReader();
         var list = new List<Models.ViewerProfile>();
@@ -252,8 +314,11 @@ public class ReviewController : ControllerBase
                 DisplayName = r.GetString(1),
                 JellyfinUserId = r.IsDBNull(2) ? null : r.GetString(2),
                 AgeHint = r.IsDBNull(3) ? null : r.GetInt32(3),
-                IsActive = r.GetInt32(4) == 1,
-                CreatedAt = r.GetString(5)
+                PendingTag = r.IsDBNull(4) ? null : r.GetString(4),
+                DeniedTag = r.IsDBNull(5) ? null : r.GetString(5),
+                AllowedTag = r.IsDBNull(6) ? null : r.GetString(6),
+                IsActive = r.GetInt32(7) == 1,
+                CreatedAt = r.GetString(8)
             });
         }
         return list;
@@ -264,7 +329,7 @@ public class ReviewController : ControllerBase
         using var conn = _db.CreateConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            SELECT id, display_name, jellyfin_user_id, age_hint, is_active, created_at
+            SELECT id, display_name, jellyfin_user_id, age_hint, pending_tag, denied_tag, allowed_tag, is_active, created_at
             FROM viewer_profiles WHERE id = @id";
         cmd.Parameters.AddWithValue("@id", id);
         using var r = cmd.ExecuteReader();
@@ -274,7 +339,10 @@ public class ReviewController : ControllerBase
             Id = r.GetString(0), DisplayName = r.GetString(1),
             JellyfinUserId = r.IsDBNull(2) ? null : r.GetString(2),
             AgeHint = r.IsDBNull(3) ? null : r.GetInt32(3),
-            IsActive = r.GetInt32(4) == 1, CreatedAt = r.GetString(5)
+            PendingTag = r.IsDBNull(4) ? null : r.GetString(4),
+            DeniedTag = r.IsDBNull(5) ? null : r.GetString(5),
+            AllowedTag = r.IsDBNull(6) ? null : r.GetString(6),
+            IsActive = r.GetInt32(7) == 1, CreatedAt = r.GetString(8)
         };
     }
 
@@ -288,6 +356,7 @@ public class ReviewController : ControllerBase
     private static ViewerProfileDto MapProfile(Models.ViewerProfile p) => new()
     {
         Id = p.Id, DisplayName = p.DisplayName, JellyfinUserId = p.JellyfinUserId,
-        AgeHint = p.AgeHint, IsActive = p.IsActive, CreatedAt = p.CreatedAt
+        AgeHint = p.AgeHint, PendingTag = p.PendingTag, DeniedTag = p.DeniedTag,
+        AllowedTag = p.AllowedTag, IsActive = p.IsActive, CreatedAt = p.CreatedAt
     };
 }

@@ -27,13 +27,17 @@ public class ParentalControlService
         if (user is null) return;
 
         var config = Plugin.Instance!.Configuration;
+        var profiles = LoadProfilesForJellyfinUser(jellyfinUserId.ToString());
+        if (profiles.Count == 0) return;
 
         var blockedTags = GetPreferenceTags(user, PreferenceKind.BlockedTags);
-        AddMissingTags(blockedTags, config.PendingTag, config.DeniedTag);
+        RemoveTags(blockedTags, config.PendingTag, config.DeniedTag, config.AllowedTag);
+        AddMissingTags(blockedTags, profiles.SelectMany(p => new[] { p.PendingTag, p.DeniedTag }).ToArray());
         user.SetPreference(PreferenceKind.BlockedTags, blockedTags.ToArray());
 
         var allowedTags = GetPreferenceTags(user, PreferenceKind.AllowedTags);
-        AddMissingTags(allowedTags, config.AllowedTag);
+        RemoveTags(allowedTags, config.PendingTag, config.DeniedTag, config.AllowedTag);
+        AddMissingTags(allowedTags, profiles.Select(p => p.AllowedTag).ToArray());
         user.SetPreference(PreferenceKind.AllowedTags, allowedTags.ToArray());
 
         await _userManager.UpdateUserAsync(user).ConfigureAwait(false);
@@ -66,6 +70,28 @@ public class ParentalControlService
         return ids;
     }
 
+    private List<(string PendingTag, string DeniedTag, string AllowedTag)> LoadProfilesForJellyfinUser(string jellyfinUserId)
+    {
+        using var conn = _db.CreateConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT pending_tag, denied_tag, allowed_tag
+            FROM viewer_profiles
+            WHERE is_active = 1 AND jellyfin_user_id = @id";
+        cmd.Parameters.AddWithValue("@id", jellyfinUserId);
+        using var reader = cmd.ExecuteReader();
+        var profiles = new List<(string PendingTag, string DeniedTag, string AllowedTag)>();
+        while (reader.Read())
+        {
+            profiles.Add((
+                reader.IsDBNull(0) ? string.Empty : reader.GetString(0),
+                reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
+                reader.IsDBNull(2) ? string.Empty : reader.GetString(2)));
+        }
+
+        return profiles;
+    }
+
     private static List<string> GetPreferenceTags(User user, PreferenceKind kind)
     {
         return user.GetPreference(kind)
@@ -79,8 +105,14 @@ public class ParentalControlService
     {
         foreach (var tag in tagsToAdd)
         {
-            if (!tags.Contains(tag, StringComparer.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(tag) && !tags.Contains(tag, StringComparer.OrdinalIgnoreCase))
                 tags.Add(tag);
         }
+    }
+
+    private static void RemoveTags(List<string> tags, params string[] tagsToRemove)
+    {
+        foreach (var tag in tagsToRemove.Where(t => !string.IsNullOrWhiteSpace(t)))
+            tags.RemoveAll(existing => string.Equals(existing, tag, StringComparison.OrdinalIgnoreCase));
     }
 }
