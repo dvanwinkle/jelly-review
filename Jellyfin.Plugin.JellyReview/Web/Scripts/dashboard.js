@@ -334,11 +334,11 @@ function createController(view) {
                 Api.getJellyfinUsers(),
                 Api.getViewerProfiles(),
             ]);
-            viewerProfiles = profiles;
-            renderProfileFilters();
-
+            const activeUserIds = new Set(users.map((u) => u.id));
             const profileByUserId = {};
             profiles.forEach((p) => { if (p.jellyfinUserId) profileByUserId[p.jellyfinUserId] = p; });
+            viewerProfiles = profiles.filter((p) => p.jellyfinUserId && activeUserIds.has(p.jellyfinUserId));
+            renderProfileFilters();
 
             $('#jr-profiles-list').innerHTML = users.map((u) => {
                 const profile = profileByUserId[u.id];

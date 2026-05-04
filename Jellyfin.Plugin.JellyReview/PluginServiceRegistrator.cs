@@ -18,7 +18,10 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<ReviewService>();
         serviceCollection.AddSingleton<NotificationService>();
         serviceCollection.AddSingleton<SyncService>();
+        serviceCollection.AddSingleton<UserSyncService>();
         serviceCollection.AddHostedService<LibraryEventListener>();
+        serviceCollection.AddHostedService<UserEventListener>();
         serviceCollection.AddScoped<IncrementalSyncTask>();
+        serviceCollection.AddScoped<UserSyncTask>();
     }
 }
