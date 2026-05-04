@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-05-03
+
+### Added
+
+- Add `UserSyncService` that deactivates viewer profiles whose Jellyfin user no longer exists and removes them from any associated rules, deleting rules entirely when all their profiles are orphaned.
+- Add `UserSyncTask` scheduled task (daily at 3 AM) to run the user sync automatically.
+- Add `UserEventListener` that triggers a user sync whenever Jellyfin fires `OnUserUpdated`, providing near-immediate cleanup when users are modified or removed.
+
+### Fixed
+
+- Filter the Add Rule profiles dropdown to only show profiles linked to an active Jellyfin user, preventing orphaned profiles from appearing as rule targets.
+
 ## [0.1.0] - 2026-04-29
 
 ### Added
